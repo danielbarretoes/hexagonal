@@ -1,0 +1,93 @@
+/**
+ * Organization TypeORM Repository
+ */
+
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { OrganizationTypeOrmEntity } from '../entities/organization.entity';
+import {
+  OrganizationQueryOptions,
+  OrganizationRepositoryPort,
+} from '../../../../domain/ports/organization.repository.port';
+import { OrganizationMapper } from '../mappers/organization.mapper';
+import type {
+  Organization,
+  CreateOrganizationProps,
+} from '../../../../domain/entities/organization.entity';
+import { Paginated } from '../../../../../../../shared/domain/primitives/paginated';
+import { OrganizationNotFoundException } from '../../../../../shared/domain/exceptions';
+
+@Injectable()
+export class OrganizationTypeOrmRepository implements OrganizationRepositoryPort {
+  constructor(
+    @InjectRepository(OrganizationTypeOrmEntity)
+    private readonly repository: Repository<OrganizationTypeOrmEntity>,
+  ) {}
+
+  async findById(id: string, options?: OrganizationQueryOptions): Promise<Organization | null> {
+    const entity = await this.repository.findOne({
+      where: { id },
+      withDeleted: options?.includeDeleted ?? false,
+    });
+    return entity ? OrganizationMapper.toDomain(entity) : null;
+  }
+
+  async findByName(name: string, options?: OrganizationQueryOptions): Promise<Organization | null> {
+    const entity = await this.repository.findOne({
+      where: { name: name.trim() },
+      withDeleted: options?.includeDeleted ?? false,
+    });
+    return entity ? OrganizationMapper.toDomain(entity) : null;
+  }
+
+  async findPaginated(page: number, limit: number): Promise<Paginated<Organization>> {
+    const skip = (page - 1) * limit;
+    const [entities, total] = await this.repository.findAndCount({
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+    return Paginated.create(entities.map(OrganizationMapper.toDomain), total, page, limit);
+  }
+
+  async create(props: CreateOrganizationProps & { id: string }): Promise<Organization> {
+    const entity = this.repository.create({
+      id: props.id,
+      name: props.name,
+    });
+    const saved = await this.repository.save(entity);
+    return OrganizationMapper.toDomain(saved);
+  }
+
+  async update(id: string, data: Partial<Organization>): Promise<Organization> {
+    const updateData: Partial<OrganizationTypeOrmEntity> = {};
+    if (data.name) updateData.name = data.name;
+    if (data.deletedAt !== undefined) updateData.deletedAt = data.deletedAt;
+
+    await this.repository.update(id, updateData);
+    const entity = await this.repository.findOne({ where: { id } });
+    if (!entity) {
+      throw new OrganizationNotFoundException(id);
+    }
+    return OrganizationMapper.toDomain(entity);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.repository.softDelete(id);
+  }
+
+  async restore(id: string): Promise<Organization> {
+    await this.repository.restore(id);
+    const entity = await this.repository.findOne({
+      where: { id },
+      withDeleted: true,
+    });
+
+    if (!entity) {
+      throw new OrganizationNotFoundException(id);
+    }
+
+    return OrganizationMapper.toDomain(entity);
+  }
+}

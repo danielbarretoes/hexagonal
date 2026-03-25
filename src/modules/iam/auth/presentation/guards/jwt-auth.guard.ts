@@ -1,0 +1,56 @@
+/**
+ * JWT Auth Guard
+ * Protects endpoints by validating JWT tokens.
+ */
+
+import {
+  Inject,
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Request } from 'express';
+import type { JwtTokenPort } from '../../domain/ports';
+import { JWT_TOKEN_PORT } from '../../application/ports/jwt-token.token';
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+  };
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(
+    @Inject(JWT_TOKEN_PORT)
+    private readonly jwtTokenPort: JwtTokenPort,
+  ) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const token = this.extractTokenFromHeader(request);
+
+    if (!token) {
+      throw new UnauthorizedException('Missing authentication token');
+    }
+
+    const payload = this.jwtTokenPort.verifyToken(token);
+
+    if (!payload) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    request.user = payload;
+    return true;
+  }
+
+  private extractTokenFromHeader(request: Request): string | undefined {
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return undefined;
+
+    const [type, token] = authHeader.split(' ');
+    return type === 'Bearer' ? token : undefined;
+  }
+}
