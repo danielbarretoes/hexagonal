@@ -1,103 +1,152 @@
-# Hexagonal Guide
+# Hexagonal Architecture Guide
 
-This document explains how this repository applies hexagonal architecture in practice.
+This document describes how this repository implements **Hexagonal Architecture** (also known as Ports & Adapters) in practice. It covers the mental model, folder structure, layer responsibilities, and common patterns used across the codebase.
 
-## 1. What Hexagonal Means Here
+---
 
-The core idea is simple:
+## Table of Contents
 
-- business rules live in `domain`
-- use cases live in `application`
-- frameworks and databases live in `infrastructure`
-- HTTP lives in `presentation`
+1. [Core Concept](#1-core-concept)
+2. [Bounded Contexts & Features](#2-bounded-contexts--features)
+3. [Global Folder Semantics](#3-global-folder-semantics)
+4. [Feature Structure](#4-feature-structure)
+5. [Layer Responsibilities](#5-layer-responsibilities)
+6. [Ports & Adapters Pattern](#6-ports--adapters-pattern)
+7. [Primary vs Secondary Adapters](#7-primary-vs-secondary-adapters)
+8. [Exception Handling](#8-exception-handling)
+9. [Request Lifecycle](#9-request-lifecycle)
+10. [Multi-Tenancy & RLS](#10-multi-tenancy--rls)
+11. [Soft Delete Pattern](#11-soft-delete-pattern)
+12. [Database & Migrations](#12-database--migrations)
+13. [Shared Kernel Guidelines](#13-shared-kernel-guidelines)
+14. [Adding a New Feature](#14-adding-a-new-feature)
+15. [Adding a New Table](#15-adding-a-new-table)
+16. [Contributor Rules](#16-contributor-rules)
+17. [Breaking the Architecture](#17-breaking-the-architecture)
+18. [Quality Gates](#18-quality-gates)
 
-Dependencies must point inward.
+---
 
-That means:
+## 1. Core Concept
 
-- `presentation` can use `application`
-- `infrastructure` can use `domain`
-- `application` can use `domain`
-- `domain` must not know Nest, TypeORM, Express, or PostgreSQL
+The core principle: **dependencies must point inward**.
 
-## 2. Bounded Contexts And Features
+```plain
+┌─────────────────────────────────────────────────────────────┐
+│                        PRESENTATION                          │
+│                    (Primary / Driving)                       │
+│                   Receives HTTP requests                     │
+└────────────────────────────┬────────────────────────────────┘
+                             │ calls
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                         APPLICATION                          │
+│                    Use Cases & Orchestration                 │
+└────────────────────────────┬────────────────────────────────┘
+                             │ calls
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                            DOMAIN                            │
+│                      (Core / Business)                       │
+│                   Pure logic, no dependencies                │
+└─────────────────────────────────────────────────────────────┘
+                             ▲
+                             │ implements
+┌─────────────────────────────────────────────────────────────┐
+│                      INFRASTRUCTURE                         │
+│                  (Secondary / Driven)                        │
+│                   Database, External Services                │
+└─────────────────────────────────────────────────────────────┘
+```
 
-This template currently has two bounded contexts:
+### Layer responsibilities
 
-- `iam`
-- `observability`
+| Layer            | Responsibility                         | Knows about                   |
+| ---------------- | -------------------------------------- | ----------------------------- |
+| `domain`         | Business rules, entities, domain ports | Nothing external              |
+| `application`    | Use cases, orchestration               | Domain                        |
+| `infrastructure` | Persistence, external services         | Domain, databases, frameworks |
+| `presentation`   | HTTP adapters, DTOs                    | Application                   |
 
-Inside IAM, these are the current features:
+### Dependency rules
 
-- `auth`
-- `users`
-- `organizations`
+```plain
+presentation  ──►  application  ──►  domain
+infrastructure ──►  domain
+```
 
-Inside observability, the current feature is:
+**Note:** The `infrastructure ──►  domain` arrow means infrastructure **depends on domain** to know which interfaces it must implement. However, domain is completely unaware that infrastructure exists. This is the essence of hexagonal architecture: the core has no knowledge of its outer layers.
 
-- `http-logs`
+**Forbidden:** Domain must not import NestJS, TypeORM, Express, or any database framework.
 
-And this is the IAM shared kernel:
+---
 
-- `src/modules/iam/shared`
+## 2. Bounded Contexts & Features
 
-This matters because `iam/shared` is not a fake feature. It exists only for concepts genuinely reused by multiple IAM features.
+This project uses two bounded contexts:
 
-Examples:
+- **`iam`** — Identity & Access Management
+- **`observability`** — HTTP logging and monitoring
 
-- IAM business exceptions
-- password hasher contract shared by auth and user lifecycle
+### IAM Features
 
-## 3. Folder Semantics
+- `auth` — Authentication flows
+- `users` — User lifecycle management
+- `organizations` — Organization management
+
+### Observability Features
+
+- `http-logs` — HTTP request/response logging
+
+### Shared Kernels
+
+- `src/modules/iam/shared` — Contracts shared within IAM (e.g., password hashing, IAM exceptions)
+- `src/shared` — Cross-context primitives (e.g., generic pagination, base exceptions)
+
+> **Rule:** Shared kernels exist only for concepts genuinely reused by multiple features. Do not create fake shared folders.
+
+---
+
+## 3. Global Folder Semantics
 
 ### `src/common`
 
-Technical cross-cutting concerns.
+Technical cross-cutting concerns only. **Never put business rules here.**
 
-Examples:
-
-- HTTP filters
-- tracing
-- tenant context
-- interceptors
-- database subscribers
-
-Never put business rules here.
+Examples: HTTP filters, tracing, tenant context, interceptors, database subscribers
 
 ### `src/shared`
 
 Global shared kernel across bounded contexts.
 
-Examples:
-
-- generic pagination primitives
-- generic domain exception base class
-- generic HTTP contracts
+Examples: generic pagination primitive, base domain exception class, generic HTTP contracts
 
 ### `src/modules/iam/shared`
 
-Shared kernel inside IAM only.
+IAM-specific shared kernel.
 
-Examples:
+Examples: IAM business exceptions, password hasher contract shared by `auth` and `users`
 
-- IAM-specific exceptions
-- IAM-specific technical contracts
+---
 
-There is no `src/modules/observability/shared` yet because the current observability scope has only one feature.
+## 4. Feature Structure
 
-## 4. Current Feature Shape
+A feature module follows this shape:
 
-A feature should normally look like this:
-
-```text
+```plain
 <feature>/
 ├── application/
 │   ├── ports/
+│   │   └── *.token.ts           (DI symbols)
 │   └── use-cases/
+│       └── *.use-case.ts
 ├── domain/
 │   ├── entities/
+│   │   └── *.entity.ts
 │   ├── ports/
-│   └── value-objects/
+│   │   └── *.port.ts            (interfaces)
+│   └── exceptions/
+│       └── *.exception.ts
 ├── infrastructure/
 │   └── persistence/
 │       └── typeorm/
@@ -106,321 +155,534 @@ A feature should normally look like this:
 │           └── repositories/
 ├── presentation/
 │   ├── controllers/
+│   │   └── *.controller.ts
 │   └── dto/
+│       ├── *.request.dto.ts
+│       └── *.response.dto.ts
 └── <feature>.module.ts
 ```
 
-Create folders only when they are needed.
+> **Rule:** Create folders only when they are needed. Empty folders indicate a missing abstraction.
 
-## 5. What Goes In Each Layer
+---
+
+## 5. Layer Responsibilities
 
 ### Domain
 
-Allowed:
+**Allowed:**
 
-- entities
-- value objects
-- invariants
-- domain ports
-- domain exceptions
+- Entities (pure classes with business logic)
+- Value objects
+- Invariants
+- Domain ports (interfaces)
+- Domain exceptions
 
-Forbidden:
+**Forbidden:**
 
 - `@Injectable()`
 - `@Entity()`
 - `Repository`
-- `Request`
-- `Response`
-- `ConflictException`
+- HTTP `Request` / `Response`
+- NestJS exceptions (`ConflictException`, `NotFoundException`, etc.)
 
 ### Application
 
-Allowed:
+**Allowed:**
 
-- use case orchestration
-- calling ports
-- coordinating domain objects
-- deciding which business exception to throw
+- Use case orchestration
+- Calling domain ports
+- Coordinating domain objects
+- Deciding which business exception to throw
+- Port tokens (DI symbols like `USER_REPOSITORY_TOKEN`)
 
-Forbidden:
+**Forbidden:**
 
-- SQL
-- TypeORM repository access directly
+- SQL or database queries
+- Direct TypeORM repository access
 - HTTP response formatting
 
 ### Infrastructure
 
-Allowed:
+**Allowed:**
 
-- ORM entities
-- repository adapters
-- JWT and bcrypt adapters
-- persistence transactions
-- tenant/RLS database plumbing
+- ORM entities (`@Entity()`, `@Column()`, etc.)
+- Repository adapters (implementations of domain ports)
+- Adapter implementations (e.g., `BcryptPasswordHasherAdapter`, `JwtServiceAdapter`)
+- Persistence transactions
+- Tenant/RLS database plumbing
+
+> **Note:** Only **implementations** go here. **Ports** (interfaces) go in Domain, and **tokens** (DI symbols) go in Application.
 
 ### Presentation
 
-Allowed:
+**Allowed:**
 
-- controllers
-- DTO validation
-- guards
-- translating HTTP input to use case commands
+- Controllers
+- DTO validation (class-validator decorators)
+- Guards
+- Translating HTTP input to use case commands (mapping DTOs to plain command objects)
 
-Forbidden:
+> **Note:** Presentation adapters are **primary (driving)** — they receive incoming requests and call the application layer.
 
-- business rules that should live in domain or application
+**Forbidden:**
 
-## 6. Ports And Adapters
+- Business rules that belong in domain or application
 
-This template uses two kinds of ports:
+**Recommended:**
 
-- domain ports
-- application port tokens
+- Mapping DTOs to plain command objects before calling use cases (keeps application layer free of presentation decorators)
 
-### Domain ports
+---
 
-These define the behavior the core needs.
+## 6. Ports & Adapters Pattern
 
-Examples:
+This project distinguishes between two types of ports:
 
-- user repository port
-- organization repository port
-- member repository port
-- password hasher port
-- JWT token port
+### Domain Ports (Interfaces)
 
-### Application port tokens
+Define the behavior the core needs. Live in `domain/ports/`.
 
-These are DI tokens used by Nest to wire adapters.
+```typescript
+// domain/ports/user.repository.port.ts
+export interface UserRepositoryPort {
+  findById(id: string): Promise<User | null>;
+  create(props: CreateUserProps & { id: string }): Promise<User>;
+  // ...
+}
+```
 
-Rule:
+### Application Port Tokens (DI Symbols)
 
-- tokens must not live in `*.module.ts`
+Injection tokens used by NestJS to wire implementations. Live in `application/ports/`.
 
-## 7. Why Domain Exceptions Instead Of Nest Exceptions
+```typescript
+// application/ports/user-repository.token.ts
+export const USER_REPOSITORY_TOKEN = Symbol('USER_REPOSITORY_TOKEN');
+```
 
-Inside domain and application, throw business exceptions.
+### How They Connect
 
-Example:
+```plain
+┌─────────────────────────────────────────────────────────────┐
+│                      Use Case                               │
+│   constructor(                                              │
+│     @Inject(USER_REPOSITORY_TOKEN)                         │
+│     private readonly repo: UserRepositoryPort              │
+│   ) {}                                                     │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ injects (port interface)
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 UserTypeOrmRepository                       │
+│   implements UserRepositoryPort                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-- `UserAlreadyExistsException`
-- `OrganizationNotFoundException`
-- `InvalidCredentialsException`
+The **token** tells NestJS which **implementation** to inject for the **port**.
 
-Do not throw:
+> **Rule:** Tokens must not live in `*.module.ts`. Keep them in `application/ports/`.
+
+### Quick Reference
+
+| Component               | Location                      | What it is                                    |
+| ----------------------- | ----------------------------- | --------------------------------------------- |
+| `UserRepositoryPort`    | `domain/ports/`               | Interface defining `findById`, `create`, etc. |
+| `USER_REPOSITORY_TOKEN` | `application/ports/`          | DI symbol for NestJS injection                |
+| `UserTypeOrmRepository` | `infrastructure/persistence/` | Implementation using TypeORM                  |
+
+| Component                     | Location                   | What it is                           |
+| ----------------------------- | -------------------------- | ------------------------------------ |
+| `PasswordHasherPort`          | `domain/ports/`            | Interface defining `hash`, `compare` |
+| `PASSWORD_HASHER_PORT`        | `application/ports/`       | DI symbol for NestJS injection       |
+| `BcryptPasswordHasherAdapter` | `infrastructure/adapters/` | Implementation using bcrypt          |
+
+---
+
+## 7. Primary vs Secondary Adapters
+
+### Primary (Driving) Adapters — Presentation
+
+Receive incoming requests and call the application layer.
+
+```plain
+HTTP Request → Controller → Use Case → ...
+```
+
+Examples: REST controllers, GraphQL resolvers, CLI commands, message handlers
+
+### Secondary (Driven) Adapters — Infrastructure
+
+Are called by the application to perform tasks.
+
+```plain
+... → Use Case → Repository → Database
+... → Use Case → EmailService → SMTP
+```
+
+Examples: TypeORM repositories, Redis caches, external API clients (Stripe, SendGrid)
+
+### Why the Names?
+
+Hexagonal Architecture (Alistair Cockburn) originally used "sides":
+
+- **Left side:** Primary (initiates the action)
+- **Right side:** Secondary (responds to the action)
+
+### When to Add Subfolders Inside Presentation?
+
+Adding `api` or `http` inside `presentation` is **redundant** if your only exposure is REST:
+
+```plain
+presentation/
+  ├── controllers/
+  └── dto/
+```
+
+> `presentation` already implies exposure. Saying `presentation/api/controllers` repeats concepts.
+
+**Only add subfolders if you expose the application multiple ways:**
+
+```plain
+presentation/
+  ├── http/              (REST API)
+  ├── grpc/              (Microservices)
+  └── cli/               (Terminal commands)
+```
+
+### Where Do DTOs Belong?
+
+DTOs belong in **Presentation** — they are the contract between the client and your API. If the frontend changes a field name, only `presentation/dto` should change.
+
+### Mappers: Location & Purpose
+
+Mappers are the "glue" that prevents your database from contaminating your domain. They transform **TypeORM entities** (with database decorators) into **domain entities** (pure classes).
+
+#### Why inside `persistence`?
+
+1. **Cohesion:** The mapper only exists because TypeORM exists. If you switch to MongoDB, the TypeORM mapper dies.
+2. **Encapsulation:** The application layer should not know mappers exist. The repository uses them internally.
+
+#### Golden Rule
+
+> "The Mapper belongs to whoever knows both sides of the coin."
+
+- Domain does **not** know about the database
+- Application does **not** know about the database
+- Infrastructure knows the database **and** the domain
+
+**Conclusion:** The mapper lives in **Infrastructure**, next to the persistence technology it transforms.
+
+#### When to Move Mappers Outside `persistence`?
+
+Only for non-database transformations, e.g., `infrastructure/external-services/stripe/mappers/StripeResponseMapper.ts`.
+
+#### Complete Flow
+
+```plain
+1. Controller receives CreateUserDto (presentation)
+2. Controller maps DTO to RegisterUserCommand (plain object/interface)
+3. Use Case receives RegisterUserCommand, creates User domain entity (application)
+4. Repository receives User entity
+5. Repository uses UserMapper to transform User → UserTypeOrmEntity
+6. UserTypeOrmEntity is saved to database
+```
+
+```plain
+Controller (Presentation)
+  │ receives DTO
+  ▼
+Controller maps DTO → RegisterUserCommand
+  │
+  ▼ (plain command, no decorators)
+Use Case (Application)
+  │ creates domain entity
+  ▼
+Repository (Infrastructure)
+  │ uses mapper
+  ▼
+UserMapper (persistence/typeorm)
+  │ transforms
+  ▼
+UserTypeOrmEntity ──► PostgreSQL
+```
+
+#### Why map DTO to Command? (Recommended Practice)
+
+**Note:** This is a recommended practice, not a strict rule. Many hexagonal projects pass DTOs directly to use cases successfully.
+
+**Reason:** DTOs may contain `class-validator` decorators, which are presentation concerns. Mapping to a plain command keeps the application layer free of presentation dependencies.
+
+**When to skip:** For simple CRUD endpoints where the overhead is not worth it.
+
+```typescript
+// presentation/controllers/users.controller.ts
+async register(@Body() dto: RegisterUserDto) {
+  const command: RegisterUserCommand = {
+    email: dto.email,
+    password: dto.password,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  };
+  return this.registerUserUseCase.execute(command);
+}
+```
+
+```typescript
+// application/use-cases/register-user.use-case.ts
+interface RegisterUserCommand {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+async execute(command: RegisterUserCommand): Promise<User> {
+  // command is a plain object, no decorators
+  // ...
+}
+```
+
+---
+
+## 8. Exception Handling
+
+### Domain Exceptions vs NestJS Exceptions
+
+**Inside domain and application layers, throw business exceptions:**
+
+```typescript
+// domain/exceptions/user-already-exists.exception.ts
+export class UserAlreadyExistsException extends DomainException {
+  constructor(email: string) {
+    super(`User with email ${email} already exists`);
+  }
+}
+```
+
+**Forbidden inside core logic:**
 
 - `ConflictException`
 - `NotFoundException`
 - `UnauthorizedException`
 
-inside core business logic.
+### Why?
 
-Why:
+- NestJS exceptions are HTTP concerns
+- Domain and application should remain reusable outside HTTP (CLI, queues, tests)
+- The presentation layer maps domain exceptions to RFC 7807 Problem Details responses
 
-- Nest exceptions are HTTP concerns
-- domain/application should stay reusable outside HTTP
-- the HTTP layer already maps domain exceptions to RFC 7807 responses
+### Exception Mapping
 
-## 8. Request Lifecycle In This Project
+```plain
+Use Case throws UserNotFoundException
+        │
+        ▼
+Exception Filter catches it
+        │
+        ▼
+Maps to HTTP 404 with RFC 7807 body
+```
 
-For a typical request:
+---
 
-1. tracing middleware adds `x-trace-id`
-2. controller validates DTO
-3. JWT guard authenticates request
-4. tenant interceptor validates the effective tenant against real membership and then opens request context
-5. use case runs
-6. repository adapter talks to PostgreSQL
-7. exceptions become Problem Details JSON
-8. HTTP logs are persisted for both success and error responses
+## 9. Request Lifecycle
 
-The public API path shape currently comes from Nest native URI versioning:
+For a typical authenticated request:
 
-- global prefix: `api`
-- versioning type: `URI`
-- current version: `v1`
+```plain
+1. Tracing middleware adds x-trace-id
+2. Controller validates DTO with class-validator
+3. JWT Guard authenticates request
+4. Tenant Interceptor validates organization membership
+5. Use Case executes business logic
+6. Repository adapter queries PostgreSQL
+7. Domain exceptions map to RFC 7807 responses
+8. HTTP logs persist for both success and error responses
+```
 
-That means controllers define `path` and `version`, and Nest exposes routes like:
+### API Versioning
+
+The project uses NestJS native URI versioning:
+
+- Global prefix: `/api`
+- Versioning type: `URI`
+- Current version: `v1`
+
+Routes are exposed as:
 
 - `/api/v1/users`
 - `/api/v1/auth/login`
 - `/api/v1/http-logs`
 
-## 9. Multi-Tenancy And RLS
+---
 
-The current tenant-scoped table is `members`.
+## 10. Multi-Tenancy & RLS
 
-How it works:
+### How It Works
 
-- PostgreSQL migration enables RLS on `members`
-- policies depend on `app.current_organization_id`
-- request lifecycle validates the effective tenant before it is stored in request context
-- repository code opens a transaction
-- repository code sets local DB role and session setting
-- the database enforces tenant filtering
+1. PostgreSQL migration enables **Row-Level Security (RLS)** on tenant-scoped tables
+2. Policies depend on `app.current_organization_id`
+3. Request lifecycle validates the effective tenant before storing in request context
+4. Repository opens a transaction and sets the local DB role + session setting
+5. Database enforces tenant filtering automatically
 
-For observability reads:
+### Current Tenant-Scoped Table
 
-- `http_logs` read endpoints require authentication
-- the caller must send `x-organization-id`
-- the caller must be a privileged member of that tenant (`owner`, `admin`, or `manager`)
-- repository filtering for `http_logs` uses the validated effective tenant from request context, not the raw header value
+`members` — links users to organizations with roles
 
-Important:
+### Requirements for New Tenant-Scoped Tables
 
-- RLS is not “magic everywhere”
-- if you add another tenant-scoped table, you must add:
-  - schema changes
-  - policies
-  - repository transaction/session setup
-  - tests
+If you add another tenant-scoped table, you must:
 
-## 10. Soft Delete Pattern
+- Add schema changes (RLS enablement)
+- Add PostgreSQL policies
+- Add repository transaction/session setup
+- Add tests
 
-Current aggregates using soft delete:
+### HTTP Logs Access
+
+- Requires authentication
+- Requires `x-organization-id` header
+- Requires privileged role (`owner`, `admin`, or `manager`)
+
+Repository filtering uses the **validated effective tenant** from request context, not the raw header value.
+
+---
+
+## 11. Soft Delete Pattern
+
+### Aggregates Using Soft Delete
 
 - `users`
 - `organizations`
 
-Pattern:
+### Implementation
 
-- domain entity exposes `softDelete()` and `restore()`
-- TypeORM entity uses `DeleteDateColumn`
-- repository uses `softDelete()` and `restore()`
+**Domain entity** exposes:
 
-## 11. Database And Migration Workflow
+```typescript
+softDelete(): User
+restore(): User
+```
 
-Hexagonal architecture does not remove the need for disciplined database lifecycle management.
+**TypeORM entity** uses:
 
-In this template:
+```typescript
+@DeleteDateColumn()
+deletedAt: Date | null;
+```
 
-- normal runtime uses `.env`
-- e2e tests use `.env.test`
-- schema creation and evolution should happen through migrations
+**Repository** uses:
 
-If you need the operational flow, see:
+```typescript
+softDelete(id: string): Promise<void>
+restore(id: string): Promise<User>
+```
 
-- [Database Workflow](/Users/danielbarreto/Desktop/Code/hexagonal/docs/database-workflow.md)
-- API exposes delete/restore endpoints when relevant
+---
 
-If you add soft delete to another aggregate, keep that same pattern.
+## 12. Database & Migrations
 
-## 12. Shared Review
+Hexagonal architecture does not eliminate the need for disciplined database lifecycle management.
 
-Current review of what belongs where:
+### Environments
 
-Keep in global `shared`:
+- **Development:** `.env`
+- **Tests:** `.env.test`
 
-- generic pagination contracts
-- generic pagination domain primitive
-- base domain exception
+### Rules
 
-Keep in `modules/iam/shared`:
+- Schema changes must happen through **migrations**, never `synchronize: true`
+- Each migration should be reversible
+- See [Database Workflow](./database-workflow.md) for operational details
 
-- IAM exceptions
-- IAM password hashing contract
+---
 
-Keep in `common`, not `shared`:
+## 13. Shared Kernel Guidelines
 
-- authenticated request/user payload typing
-- trace and tenant request lifecycle utilities
-- RFC 7807 HTTP mapping
+### What Belongs Where
 
-Do not move feature response DTOs into shared unless they become genuinely cross-context contracts.
+| Location                 | Contents                                                          |
+| ------------------------ | ----------------------------------------------------------------- |
+| `src/shared`             | Generic pagination, base exception class, cross-context contracts |
+| `src/modules/iam/shared` | IAM exceptions, password hasher contract                          |
+| `src/common`             | Technical concerns (tracing, tenant context, RFC 7807 mapping)    |
 
-Examples that should stay feature-local:
+### Feature-Local Items (Do Not Share)
 
 - `UserResponseDto`
 - `OrganizationResponseDto`
 - `HttpLogResponseDto`
 
-## 13. Strictness Verdict
+Only promote to shared when they become genuinely cross-context contracts.
 
-Current verdict:
+---
 
-- yes, the project still maintains a strict hexagonal direction overall
-- domain remains free of Nest and TypeORM
-- application still orchestrates through ports
-- infrastructure still holds ORM adapters and technical implementations
-- presentation still owns HTTP controllers, DTOs, guards, and middleware concerns
-- the project now includes an architecture test suite that checks key dependency rules beyond the ESLint heuristic
+## 14. Adding a New Feature
 
-Known nuance:
+Follow this order:
 
-- the ESLint rule is an enforcement aid, not a proof system
-- cross-feature technical sharing is intentionally narrow and currently limited to shared kernel, common technical concerns, guards, and port contracts
+### Step 1: Create the Feature Folder
 
-## 14. Adding A New Feature
-
-Use this order.
-
-### Step 1. Create the feature folder
-
-Example:
-
-```text
+```plain
 src/modules/iam/invitations/
 ```
 
-### Step 2. Model the domain
+### Step 2: Model the Domain
 
 Start with:
 
-- entity
-- value objects if needed
-- repository port
-- exceptions
+- Entity (aggregate root)
+- Value objects (if needed)
+- Repository port (interface)
+- Domain exceptions
 
-### Step 3. Add use cases
+### Step 3: Add Use Cases
 
 Typical first use cases:
 
-- create
-- get by id
-- paginate
-- delete / restore if lifecycle requires it
+- `create`
+- `getById`
+- `paginate`
+- `delete` / `restore` (if lifecycle requires soft delete)
 
-### Step 4. Implement adapters
-
-Add:
+### Step 4: Implement Adapters
 
 - TypeORM entity
-- mapper
-- repository adapter
+- Mapper
+- Repository adapter (implements the domain port)
 
-### Step 5. Expose HTTP
+### Step 5: Expose HTTP
 
-Add:
+- Request DTOs
+- Controller methods
+- Guards (if needed)
 
-- request DTOs
-- controller methods
-- guards if needed
-
-### Step 6. Register module wiring
+### Step 6: Register Module
 
 In `<feature>.module.ts`:
 
-- `TypeOrmModule.forFeature(...)`
-- providers
-- controllers
-- exports only when needed
+- `TypeOrmModule.forFeature([...entities])`
+- Providers (use cases, repository adapter)
+- Controllers
+- Exports (only when needed)
 
-### Step 7. Add migrations
+### Step 7: Add Migrations
 
-If schema changes, update the migration story.
+If schema changes occur, create a migration.
 
-Do not rely on `synchronize` as the primary path.
+### Step 8: Add Tests
 
-### Step 8. Add tests
+Minimum:
 
-Minimum expectation:
+- Domain test for invariants
+- Use case test where risk is non-trivial
+- E2E test if public API changes
 
-- domain test for invariants
-- config/use-case test where risk is non-trivial
-- e2e test if public API changes
+---
 
-## 12. Adding A New Table
+## 15. Adding a New Table
 
 Before adding a table, answer:
 
@@ -433,40 +695,52 @@ Before adding a table, answer:
 Then implement:
 
 - TypeORM entity
-- migration
-- indexes
-- foreign keys
-- delete strategy
-- tests
+- Migration
+- Indexes
+- Foreign keys
+- Delete strategy
+- Tests
 
-## 13. Practical Rules For Contributors
+---
 
-- prefer adding code where the concept already belongs instead of inventing new shared folders
-- keep modules thin and compositional
-- keep domain immutable where practical
-- do not let controllers call TypeORM directly
-- do not let repositories return ORM entities to use cases
-- map persistence entities to domain entities explicitly
-- avoid empty folders
+## 16. Contributor Rules
 
-## 14. How To Know You Broke Hexagonal
+- Prefer adding code where the concept already belongs instead of creating new shared folders
+- Keep modules thin and compositional
+- Keep domain immutable where practical
+- **Do not let controllers call TypeORM directly**
+- **Do not let repositories return ORM entities to use cases**
+- Map persistence entities to domain entities explicitly
+- Avoid empty folders (they indicate a missing abstraction)
 
-You probably broke the architecture if:
+---
 
-- a domain file imports Nest or TypeORM
-- a use case imports a repository adapter directly
-- a controller contains business branching
-- a business exception becomes a Nest HTTP exception inside core logic
-- a module file becomes the only place where tokens/contracts exist
+## 17. Breaking the Architecture
+
+You likely broke hexagonal architecture if:
+
+- A domain file imports NestJS or TypeORM
+- A use case imports a repository adapter directly
+- A controller contains business branching logic
+- A business exception becomes a NestJS HTTP exception inside core logic
+- A module file becomes the only place where tokens/contracts exist
 - `common` starts collecting business concepts
 
-## 15. Current Quality Gates
+---
 
-Run:
+## 18. Quality Gates
 
-- `npm run lint`
-- `npm run build`
-- `npm test -- --runInBand`
-- `npm run test:e2e -- --runInBand`
+Before merging or releasing, run:
 
-If schema behavior matters, also verify migrations and RLS behavior through the existing PostgreSQL-backed e2e suite.
+```bash
+npm run lint
+npm run build
+npm test -- --runInBand
+npm run test:e2e -- --runInBand
+```
+
+If schema behavior matters, also verify migrations and RLS behavior through the PostgreSQL-backed e2e suite.
+
+---
+
+_Last updated: 2026-03-26_
