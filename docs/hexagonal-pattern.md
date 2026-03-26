@@ -79,6 +79,19 @@ infrastructure ──►  domain
 
 **Forbidden:** Domain must not import NestJS, TypeORM, Express, or any database framework.
 
+### The Golden Rule of Imports
+
+The dependency direction is unidirectional. Each layer has strict import rules:
+
+| Layer            | Can import from                                                   |
+| ---------------- | ----------------------------------------------------------------- |
+| `domain`         | Nobody (it is the core)                                           |
+| `application`    | `domain` only                                                     |
+| `infrastructure` | `domain` (to implement interfaces), `application` (to use tokens) |
+| `presentation`   | `application` only                                                |
+
+This ensures the core remains pure and testable without any external dependencies.
+
 ---
 
 ## 2. Bounded Contexts & Features
@@ -372,6 +385,37 @@ Mappers are the "glue" that prevents your database from contaminating your domai
 - Infrastructure knows the database **and** the domain
 
 **Conclusion:** The mapper lives in **Infrastructure**, next to the persistence technology it transforms.
+
+#### Who Calls the Mapper?
+
+**The Mapper is a private tool of the Repository. Use cases are unaware it exists.**
+
+```plain
+Use Case (Application)
+  │ sends DomainEntity
+  ▼
+Repository (Infrastructure)
+  │ uses Mapper internally
+  ▼
+Mapper transforms DomainEntity → TypeOrmEntity
+  │
+  ▼
+Database saves TypeOrmEntity
+```
+
+On retrieval:
+
+```plain
+Database returns TypeOrmEntity
+  │
+  ▼
+Repository uses Mapper internally
+  │
+  ▼ transforms
+Repository returns pure DomainEntity to Use Case
+```
+
+**Rule:** The mapper is an implementation detail of the repository. Never expose it to use cases or higher layers.
 
 #### When to Move Mappers Outside `persistence`?
 
