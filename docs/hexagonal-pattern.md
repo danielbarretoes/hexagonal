@@ -743,4 +743,4 @@ If schema behavior matters, also verify migrations and RLS behavior through the 
 
 ---
 
-_Last updated: 2026-03-26_
+Last updated: 2026-03-26
