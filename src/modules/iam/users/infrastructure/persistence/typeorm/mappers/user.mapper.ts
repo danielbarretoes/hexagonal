@@ -14,6 +14,7 @@ export class UserMapper {
       passwordHash: entity.passwordHash,
       firstName: entity.firstName,
       lastName: entity.lastName,
+      emailVerifiedAt: entity.emailVerifiedAt,
       deletedAt: entity.deletedAt,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,

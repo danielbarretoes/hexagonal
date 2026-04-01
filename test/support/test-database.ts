@@ -3,7 +3,16 @@ import { DataSource } from 'typeorm';
 import { createAppDataSource } from '../../src/config/database/data-source';
 import { loadEnvironment } from '../../src/config/env/load-env';
 
-export const TEST_TABLES = ['http_logs', 'members', 'organizations', 'users'] as const;
+export const TEST_TABLES = [
+  'audit_logs',
+  'organization_invitations',
+  'user_action_tokens',
+  'auth_sessions',
+  'http_logs',
+  'members',
+  'organizations',
+  'users',
+] as const;
 export const RLS_RUNTIME_ROLE = 'hexagonal_app_runtime';
 
 export function useTestDatabaseEnvironment(): void {
@@ -12,6 +21,8 @@ export function useTestDatabaseEnvironment(): void {
   process.env.DB_DROP_SCHEMA = 'false';
   process.env.DB_MIGRATIONS_RUN = 'false';
   process.env.DB_LOGGING = 'false';
+  process.env.AUTH_EXPOSE_PRIVATE_TOKENS = 'true';
+  process.env.AUTH_RATE_LIMIT_ENABLED = 'false';
 }
 
 export async function resetTestDatabase(): Promise<DataSource> {

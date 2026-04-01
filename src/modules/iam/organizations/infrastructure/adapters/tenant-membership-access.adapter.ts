@@ -1,19 +1,25 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { MEMBER_REPOSITORY_TOKEN } from '../../application/ports/member-repository.token';
 import type { MemberRepositoryPort } from '../../domain/ports/member.repository.port';
-import type { TenantAccessPort } from '../../../../../shared/domain/ports/tenant-access.port';
+import type { PermissionCode } from '../../../../../shared/domain/authorization/permission-codes';
+import type { AuthorizationPort } from '../../../../../shared/domain/ports/authorization.port';
 
 @Injectable()
-export class TenantMembershipAccessAdapter implements TenantAccessPort {
+export class TenantMembershipAccessAdapter implements AuthorizationPort {
   constructor(
     @Inject(MEMBER_REPOSITORY_TOKEN)
     private readonly memberRepository: MemberRepositoryPort,
   ) {}
 
-  async hasAccess(
+  async hasTenantAccess(userId: string, organizationId: string): Promise<boolean> {
+    const member = await this.memberRepository.findByUserAndOrganization(userId, organizationId);
+    return Boolean(member);
+  }
+
+  async hasPermission(
     userId: string,
     organizationId: string,
-    allowedRoles?: readonly string[],
+    permissionCode: PermissionCode,
   ): Promise<boolean> {
     const member = await this.memberRepository.findByUserAndOrganization(userId, organizationId);
 
@@ -21,10 +27,6 @@ export class TenantMembershipAccessAdapter implements TenantAccessPort {
       return false;
     }
 
-    if (!allowedRoles || allowedRoles.length === 0) {
-      return true;
-    }
-
-    return allowedRoles.includes(member.role.name);
+    return member.role.hasPermission(permissionCode);
   }
 }

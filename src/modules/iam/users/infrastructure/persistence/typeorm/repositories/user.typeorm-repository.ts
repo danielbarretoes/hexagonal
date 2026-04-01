@@ -5,7 +5,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { UserTypeOrmEntity } from '../entities/user.entity';
 import {
   UserQueryOptions,
@@ -29,6 +29,23 @@ export class UserTypeOrmRepository implements UserRepositoryPort {
       withDeleted: options?.includeDeleted ?? false,
     });
     return entity ? UserMapper.toDomain(entity) : null;
+  }
+
+  async findManyByIds(ids: readonly string[], options?: UserQueryOptions): Promise<User[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const entities = await this.repository.find({
+      where: { id: In([...ids]) },
+      withDeleted: options?.includeDeleted ?? false,
+    });
+    const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
+
+    return ids
+      .map((id) => entitiesById.get(id))
+      .filter((entity): entity is UserTypeOrmEntity => Boolean(entity))
+      .map(UserMapper.toDomain);
   }
 
   async findByEmail(email: string, options?: UserQueryOptions): Promise<User | null> {
@@ -56,6 +73,7 @@ export class UserTypeOrmRepository implements UserRepositoryPort {
       passwordHash: props.passwordHash,
       firstName: props.firstName,
       lastName: props.lastName,
+      emailVerifiedAt: props.emailVerifiedAt ?? null,
     });
     const saved = await this.repository.save(entity);
     return UserMapper.toDomain(saved);
@@ -67,6 +85,7 @@ export class UserTypeOrmRepository implements UserRepositoryPort {
     if (data.passwordHash) updateData.passwordHash = data.passwordHash;
     if (data.firstName) updateData.firstName = data.firstName;
     if (data.lastName) updateData.lastName = data.lastName;
+    if (data.emailVerifiedAt !== undefined) updateData.emailVerifiedAt = data.emailVerifiedAt;
     if (data.deletedAt !== undefined) updateData.deletedAt = data.deletedAt;
 
     await this.repository.update(id, updateData);

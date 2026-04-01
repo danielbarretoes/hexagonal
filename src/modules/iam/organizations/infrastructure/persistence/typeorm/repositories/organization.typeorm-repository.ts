@@ -4,7 +4,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { OrganizationTypeOrmEntity } from '../entities/organization.entity';
 import {
   OrganizationQueryOptions,
@@ -31,6 +31,26 @@ export class OrganizationTypeOrmRepository implements OrganizationRepositoryPort
       withDeleted: options?.includeDeleted ?? false,
     });
     return entity ? OrganizationMapper.toDomain(entity) : null;
+  }
+
+  async findManyByIds(
+    ids: readonly string[],
+    options?: OrganizationQueryOptions,
+  ): Promise<Organization[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const entities = await this.repository.find({
+      where: { id: In([...ids]) },
+      withDeleted: options?.includeDeleted ?? false,
+    });
+    const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
+
+    return ids
+      .map((id) => entitiesById.get(id))
+      .filter((entity): entity is OrganizationTypeOrmEntity => Boolean(entity))
+      .map(OrganizationMapper.toDomain);
   }
 
   async findByName(name: string, options?: OrganizationQueryOptions): Promise<Organization | null> {

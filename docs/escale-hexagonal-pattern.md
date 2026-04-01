@@ -14,6 +14,8 @@ This document covers real production risks, senior-level improvements, and elite
 
 ## 1. Real Production Risks
 
+This document is intentionally about **scaling paths**, not the mandatory baseline for the template. A strong template should stay small and teachable first.
+
 ### 1.1 Missing "Application Services vs Use Cases"
 
 **Current structure:**
@@ -326,6 +328,8 @@ class RegisterUserUseCase extends UseCase<RegisterUserCommand, User> {
 - Audit trails
 - Error tracking
 
+For this repository, treat OpenTelemetry, ELK, Grafana, and similar stacks as an optional follow-up stage instead of a base-template requirement.
+
 ---
 
 ### 2.5 Pagination as Application Contract
@@ -358,6 +362,8 @@ async execute(query: PaginationQuery): Promise<PaginatedResult<User>>;
 ---
 
 ## 3. Top 1% Patterns
+
+These patterns are valuable only after the baseline remains stable, understandable, and necessary for your real use cases.
 
 ### 3.1 Lightweight CQRS
 
@@ -478,6 +484,8 @@ class DeleteUserUseCase extends UseCase<DeleteUserCommand, void> {
 - Testable authorization logic
 - Reusable across use cases
 - Clear separation of concerns
+
+The template now includes persisted RBAC roles and module-level permissions as a baseline. The next step, if complexity grows, is to move from raw permission checks to explicit policy objects over those permissions.
 
 ---
 

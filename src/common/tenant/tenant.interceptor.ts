@@ -14,8 +14,8 @@ import {
 import { Observable } from 'rxjs';
 import { TenantContext, TenantInfo } from './tenant-context';
 import type { AuthenticatedUserPayload } from '../http/authenticated-request';
-import { TENANT_ACCESS_PORT } from '../../shared/application/ports/tenant-access.token';
-import type { TenantAccessPort } from '../../shared/domain/ports/tenant-access.port';
+import { AUTHORIZATION_PORT } from '../../shared/application/ports/authorization.token';
+import type { AuthorizationPort } from '../../shared/domain/ports/authorization.port';
 
 interface TenantAwareRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -26,8 +26,8 @@ interface TenantAwareRequest {
 @Injectable()
 export class TenantInterceptor implements NestInterceptor {
   constructor(
-    @Inject(TENANT_ACCESS_PORT)
-    private readonly tenantAccessPort: TenantAccessPort,
+    @Inject(AUTHORIZATION_PORT)
+    private readonly authorizationPort: AuthorizationPort,
   ) {}
 
   async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
@@ -36,8 +36,12 @@ export class TenantInterceptor implements NestInterceptor {
     const organizationId = typeof organizationHeader === 'string' ? organizationHeader : '';
     const normalizedOrganizationId = organizationId.trim();
 
-    if (request.user && normalizedOrganizationId) {
-      const hasAccess = await this.tenantAccessPort.hasAccess(
+    if (
+      request.user &&
+      normalizedOrganizationId &&
+      request.effectiveOrganizationId !== normalizedOrganizationId
+    ) {
+      const hasAccess = await this.authorizationPort.hasTenantAccess(
         request.user.userId,
         normalizedOrganizationId,
       );

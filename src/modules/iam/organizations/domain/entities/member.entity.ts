@@ -51,4 +51,11 @@ export class Member {
   }): Member {
     return new Member(props);
   }
+
+  changeRole(role: MembershipRole): Member {
+    return new Member({
+      ...this,
+      role,
+    });
+  }
 }

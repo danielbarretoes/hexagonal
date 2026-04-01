@@ -11,6 +11,11 @@ import { PASSWORD_HASHER_PORT } from '../../../shared/application/ports/password
 import type { JwtTokenPort } from '../../domain/ports';
 import type { PasswordHasherPort } from '../../../shared/domain/ports/password-hasher.port';
 import { InvalidCredentialsException } from '../../../shared/domain/exceptions';
+import { AUTH_SESSION_REPOSITORY_TOKEN } from '../ports/auth-session-repository.token';
+import type { AuthSessionRepositoryPort } from '../../domain/ports/auth-session.repository.port';
+import { createOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
+import { RefreshSessionUseCase } from './refresh-session.use-case';
+import { AUTH_RUNTIME_CONFIG } from '../../../../../config/auth/auth-runtime.config';
 
 export interface LoginCommand {
   email: string;
@@ -19,6 +24,7 @@ export interface LoginCommand {
 
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   userId: string;
   email: string;
 }
@@ -32,6 +38,8 @@ export class LoginUseCase {
     private readonly jwtTokenPort: JwtTokenPort,
     @Inject(PASSWORD_HASHER_PORT)
     private readonly passwordHasher: PasswordHasherPort,
+    @Inject(AUTH_SESSION_REPOSITORY_TOKEN)
+    private readonly authSessionRepository: AuthSessionRepositoryPort,
   ) {}
 
   async execute(command: LoginCommand): Promise<LoginResponse> {
@@ -47,6 +55,16 @@ export class LoginUseCase {
       throw new InvalidCredentialsException();
     }
 
+    const opaqueRefreshToken = createOpaqueToken();
+    const refreshTokenHash = await this.passwordHasher.hash(opaqueRefreshToken.secret);
+    const session = RefreshSessionUseCase.createSession(
+      opaqueRefreshToken.id,
+      user.id,
+      refreshTokenHash,
+      AUTH_RUNTIME_CONFIG.refreshSessionTtlMs,
+    );
+    await this.authSessionRepository.create(session);
+
     const token = this.jwtTokenPort.generateToken({
       userId: user.id,
       email: user.email,
@@ -54,6 +72,7 @@ export class LoginUseCase {
 
     return {
       accessToken: token,
+      refreshToken: opaqueRefreshToken.token,
       userId: user.id,
       email: user.email,
     };

@@ -4,37 +4,44 @@
  */
 
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { UserTypeOrmEntity } from './infrastructure/persistence/typeorm/entities/user.entity';
-import { UserTypeOrmRepository } from './infrastructure/persistence/typeorm/repositories/user.typeorm-repository';
 import { RegisterUserUseCase } from './application/use-cases/register-user.use-case';
+import { CreateUserInOrganizationUseCase } from './application/use-cases/create-user-in-organization.use-case';
 import { GetUserByIdUseCase } from './application/use-cases/get-user-by-id.use-case';
 import { GetPaginatedUsersUseCase } from './application/use-cases/get-paginated-users.use-case';
 import { DeleteUserUseCase } from './application/use-cases/delete-user.use-case';
 import { RestoreUserUseCase } from './application/use-cases/restore-user.use-case';
-import { USER_REPOSITORY_TOKEN } from './application/ports/user-repository.token';
+import { UpdateUserProfileInOrganizationUseCase } from './application/use-cases/update-user-profile-in-organization.use-case';
 import { UsersController } from './presentation/controllers/users.controller';
 import { AuthSupportModule } from '../auth/auth-support.module';
+import { UsersAccessModule } from './users-access.module';
+import { IamAuthorizationAccessModule } from '../iam-authorization-access.module';
+import { RolesAccessModule } from '../roles/roles-access.module';
+import { TenantUserManagementPolicy } from './application/policies/tenant-user-management.policy';
+import { PermissionGuard } from '../../../common/http/guards/permission.guard';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserTypeOrmEntity]), AuthSupportModule],
+  imports: [UsersAccessModule, AuthSupportModule, IamAuthorizationAccessModule, RolesAccessModule],
   controllers: [UsersController],
   providers: [
-    { provide: USER_REPOSITORY_TOKEN, useClass: UserTypeOrmRepository },
-    UserTypeOrmRepository,
     RegisterUserUseCase,
+    CreateUserInOrganizationUseCase,
     GetUserByIdUseCase,
     GetPaginatedUsersUseCase,
     DeleteUserUseCase,
     RestoreUserUseCase,
+    UpdateUserProfileInOrganizationUseCase,
+    TenantUserManagementPolicy,
+    PermissionGuard,
   ],
   exports: [
-    USER_REPOSITORY_TOKEN,
+    UsersAccessModule,
     RegisterUserUseCase,
+    CreateUserInOrganizationUseCase,
     GetUserByIdUseCase,
     GetPaginatedUsersUseCase,
     DeleteUserUseCase,
     RestoreUserUseCase,
+    UpdateUserProfileInOrganizationUseCase,
   ],
 })
 export class UsersModule {}

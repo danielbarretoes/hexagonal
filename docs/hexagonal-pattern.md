@@ -106,6 +106,7 @@ This project uses two bounded contexts:
 - `auth` — Authentication flows
 - `users` — User lifecycle management
 - `organizations` — Organization management
+- `roles` — Persisted RBAC roles and permissions
 
 ### Observability Features
 
@@ -114,7 +115,7 @@ This project uses two bounded contexts:
 ### Shared Kernels
 
 - `src/modules/iam/shared` — Contracts shared within IAM (e.g., password hashing, IAM exceptions)
-- `src/shared` — Cross-context primitives (e.g., generic pagination, base exceptions)
+- `src/shared` — Cross-context primitives (e.g., generic pagination, base exceptions, authorization contracts)
 
 > **Rule:** Shared kernels exist only for concepts genuinely reused by multiple features. Do not create fake shared folders.
 
@@ -128,17 +129,33 @@ Technical cross-cutting concerns only. **Never put business rules here.**
 
 Examples: HTTP filters, tracing, tenant context, interceptors, database subscribers
 
+`common` may compose technical Nest modules, but non-module implementation files should not depend directly on bounded-context internals.
+
 ### `src/shared`
 
 Global shared kernel across bounded contexts.
 
-Examples: generic pagination primitive, base domain exception class, generic HTTP contracts
+Examples: generic pagination primitive, base domain exception class, generic HTTP contracts, permission codes, authorization ports
 
 ### `src/modules/iam/shared`
 
 IAM-specific shared kernel.
 
 Examples: IAM business exceptions, password hasher contract shared by `auth` and `users`
+
+### Provider-only access modules
+
+Some features expose a small Nest module dedicated to infrastructure wiring that other modules can reuse without importing the entire feature module.
+
+Examples:
+
+- `users-access.module.ts`
+- `organizations-access.module.ts`
+- `iam-authorization-access.module.ts`
+
+Use this when another module only needs a token/provider, not the feature's controllers or use cases.
+
+Do not use an access module as an excuse to let sibling features grow a wide web of direct imports. Access modules solve Nest wiring; once a workflow starts coordinating multiple sibling features, introduce a bounded-context application facade/orchestration service instead.
 
 ---
 
@@ -148,6 +165,7 @@ A feature module follows this shape:
 
 ```plain
 <feature>/
+├── <feature>-access.module.ts      (optional provider-only bridge for other modules)
 ├── application/
 │   ├── ports/
 │   │   └── *.token.ts           (DI symbols)
@@ -295,6 +313,42 @@ export const USER_REPOSITORY_TOKEN = Symbol('USER_REPOSITORY_TOKEN');
 The **token** tells NestJS which **implementation** to inject for the **port**.
 
 > **Rule:** Tokens must not live in `*.module.ts`. Keep them in `application/ports/`.
+
+### Authorization Ports
+
+Cross-context authorization belongs in `src/shared` because multiple bounded contexts may need to ask the same question:
+
+```typescript
+// shared/domain/ports/authorization.port.ts
+export interface AuthorizationPort {
+  hasTenantAccess(userId: string, organizationId: string): Promise<boolean>;
+  hasPermission(
+    userId: string,
+    organizationId: string,
+    permissionCode: PermissionCode,
+  ): Promise<boolean>;
+}
+```
+
+This keeps `common` and non-IAM contexts depending on a narrow contract instead of IAM internals.
+
+### Shared Permission Guard Pattern
+
+Tenant-scoped HTTP permissions should be expressed with shared metadata plus one reusable guard:
+
+```typescript
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions(PERMISSION_CODES.IAM_USERS_WRITE)
+@Post()
+async createForOrganization(...) {}
+```
+
+Rules:
+
+- keep permission resolution in `src/common/http/guards/permission.guard.ts`
+- keep permission vocabulary in `src/shared/domain/authorization/permission-codes.ts`
+- do not create feature-specific permission guards that inject `AUTHORIZATION_PORT` directly
+- use application policies for target-specific rules such as "can manage this user" or "can rename this tenant"
 
 ### Quick Reference
 
@@ -536,13 +590,14 @@ For a typical authenticated request:
 
 ```plain
 1. Tracing middleware adds x-trace-id
-2. Controller validates DTO with class-validator
-3. JWT Guard authenticates request
-4. Tenant Interceptor validates organization membership
-5. Use Case executes business logic
-6. Repository adapter queries PostgreSQL
-7. Domain exceptions map to RFC 7807 responses
-8. HTTP logs persist for both success and error responses
+2. JWT Guard authenticates request
+3. PermissionGuard validates `x-organization-id` + required permission metadata
+4. Tenant Interceptor validates membership and opens the async tenant context
+5. Controller validates DTO with class-validator
+6. Use Case executes business logic and tenant policies
+7. Repository adapter queries PostgreSQL
+8. Domain exceptions map to RFC 7807 responses
+9. HTTP logs persist for both success and error responses
 ```
 
 ### API Versioning
@@ -555,8 +610,15 @@ The project uses NestJS native URI versioning:
 
 Routes are exposed as:
 
+- `/api/v1/users/self-register`
 - `/api/v1/users`
 - `/api/v1/auth/login`
+- `/api/v1/auth/refresh`
+- `/api/v1/auth/password-reset/request`
+- `/api/v1/auth/email-verification/request`
+- `/api/v1/organizations/:id`
+- `/api/v1/members`
+- `/api/v1/organization-invitations`
 - `/api/v1/http-logs`
 
 ---
@@ -571,9 +633,11 @@ Routes are exposed as:
 4. Repository opens a transaction and sets the local DB role + session setting
 5. Database enforces tenant filtering automatically
 
-### Current Tenant-Scoped Table
+### Current Tenant-Scoped Tables
 
-`members` — links users to organizations with roles
+- `members` — links users to organizations with a persisted `role_id`
+- `http_logs` (read path) — audited request history scoped by validated `organization_id`
+- `organization_invitations` — tenant-managed invitation creation and lookup, plus invitation-id scoped acceptance access
 
 ### Requirements for New Tenant-Scoped Tables
 
@@ -588,7 +652,16 @@ If you add another tenant-scoped table, you must:
 
 - Requires authentication
 - Requires `x-organization-id` header
-- Requires privileged role (`owner`, `admin`, or `manager`)
+- Uses the shared `PermissionGuard` + `@RequirePermissions(...)`
+- Requires the `observability.http_logs.read` permission
+
+### Administrative Audit Trail
+
+- `audit_logs` is separate from `http_logs`
+- use it for sensitive business actions such as membership changes, invitation lifecycle, and session revocation
+- keep request observability and administrative auditability as distinct concerns
+- Repository access fails closed when tenant context is missing
+- PostgreSQL RLS protects read queries through the runtime tenant role
 
 Repository filtering uses the **validated effective tenant** from request context, not the raw header value.
 
@@ -652,6 +725,14 @@ Hexagonal architecture does not eliminate the need for disciplined database life
 | `src/shared`             | Generic pagination, base exception class, cross-context contracts |
 | `src/modules/iam/shared` | IAM exceptions, password hasher contract                          |
 | `src/common`             | Technical concerns (tracing, tenant context, RFC 7807 mapping)    |
+
+### Additional boundary rules
+
+- `src/shared` must not depend on feature modules or `src/common`
+- `src/common` should stay technical; if it needs a business capability, depend on a narrow shared port/provider rather than feature internals
+- `src/modules/<context>/<feature>/<feature>-access.module.ts` is the preferred escape hatch when Nest composition needs cross-feature providers
+- feature modules must not import other feature modules directly unless the target is an explicit access/support module
+- sibling features inside the same bounded context should prefer `application/ports`, `domain/ports`, or the context shared kernel over importing each other's internal domain/infrastructure files
 
 ### Feature-Local Items (Do Not Share)
 
@@ -769,6 +850,8 @@ You likely broke hexagonal architecture if:
 - A business exception becomes a NestJS HTTP exception inside core logic
 - A module file becomes the only place where tokens/contracts exist
 - `common` starts collecting business concepts
+- a feature module imports another feature module directly instead of an access/support module
+- sibling features inside the same bounded context start importing each other's internals instead of going through ports, shared kernel, or a context-level facade
 
 ---
 
@@ -777,14 +860,21 @@ You likely broke hexagonal architecture if:
 Before merging or releasing, run:
 
 ```bash
-npm run lint
+npm run lint:check
 npm run build
+npm run test:arch
 npm test -- --runInBand
 npm run test:e2e -- --runInBand
+```
+
+Or run the same local contract with:
+
+```bash
+npm run test:all
 ```
 
 If schema behavior matters, also verify migrations and RLS behavior through the PostgreSQL-backed e2e suite.
 
 ---
 
-Last updated: 2026-03-26
+Last updated: 2026-04-01

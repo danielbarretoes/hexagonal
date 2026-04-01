@@ -9,4 +9,5 @@ export interface AuthenticatedUserPayload {
 
 export interface AuthenticatedHttpRequest extends Request {
   user?: AuthenticatedUserPayload;
+  effectiveOrganizationId?: string;
 }

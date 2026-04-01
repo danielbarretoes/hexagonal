@@ -1,231 +1,158 @@
-# Auditoría del Proyecto - Patrón Hexagonal
+# Auditoría Actualizada Del Proyecto
 
-He realizado una auditoría completa del proyecto. Aquí están mis hallazgos:
-
----
-
-## Cumplimiento del Patrón Hexagonal
-
-### Fortalezas Estructurales
-
-| Aspecto                | Estado | Descripción                                                                        |
-| ---------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Separación de capas    | ✅     | domain → application → infrastructure → presentation claramente definidos          |
-| Puertos (Ports)        | ✅     | Interfaces como `UserRepositoryPort`, `PasswordHasherPort` son abstracciones清洁   |
-| Adaptadores            | ✅     | `UserTypeOrmRepository`, `BcryptPasswordHasherAdapter` implementan los puertos     |
-| Entidades de dominio   | ✅     | `User`, `Organization` son clases TypeScript puras, sin dependencias de frameworks |
-| Casos de uso           | ✅     | Orquestación en `application/use-cases`, sin lógica de infraestructura             |
-| Excepciones de dominio | ✅     | Extienden `DomainException`, no `NestHttpException`                                |
-| Shared Kernel          | ✅     | `src/shared` global y `modules/iam/shared` para el bounded context                 |
-| Test de arquitectura   | ✅     | `hexagonal-architecture.spec.ts` valida las dependencias entre capas               |
-
-### Estructura de capas observada
-
-```plain
-presentation (controllers, guards, DTOs)
-         ↓ llama
-application (use-cases, port tokens)
-         ↓ usa
-  domain (entities, ports, exceptions)
-         ↓ implementado por
-infrastructure (TypeORM adapters, repositories)
-```
+Estado revisado después de contrastar documentación, estructura real de `src` y cambios recientes.
 
 ---
 
-## Buenas Prácticas Implementadas
+## Veredicto Ejecutivo
 
-- **Tokens de DI centralizados** — `USER_REPOSITORY_TOKEN`, `ORGANIZATION_REPOSITORY_TOKEN`
-- **Soft delete + restore** — `User.softDelete()`, `Organization.restore()`
-- **Multi-tenancy con RLS** — PostgreSQL Row Level Security en members
-- **AsyncLocalStorage** para contexto de tenant
-- **RFC 7807 Problem Details** — Respuestas de error estandarizadas
-- **API versionada** — `/api/v1/...`
-- **Swagger/OpenAPI** — Documentación en `/docs`
-- **Value Objects** — `MembershipRole`
-- **Migraciones de base de datos** — Baseline migration
-- **Pagination primitiva** — `Paginated<T>` en shared kernel
+El proyecto **sí sirve como base sólida para una plantilla backend API hexagonal**. La separación de capas es coherente, el lenguaje de la documentación es didáctico, y el código ya enseña varios patrones útiles sin caer todavía en complejidad enterprise innecesaria.
 
----
+Puntuación actual orientativa:
 
-## Puntos de Fallo Identificados
-
-### 1. ALTA — Acoplamiento circular potencial
-
-**Archivo:** `auth.module.ts` (líneas 10-13 y 20-21)
-
-```typescript
-import { UsersModule } from '../users/users.module';
-import { AuthModule } from './auth.module';
-
-@Module({
-  imports: [UsersModule, AuthSupportModule],
-```
-
-**Problema:** `AuthModule` importa `UsersModule` para acceder al token `USER_REPOSITORY_TOKEN`. Si `UsersModule` cambia, podría afectar `AuthModule`.
-
-**Recomendación:** Considerar si `UserRepositoryPort` debería estar en `iam/shared` para evitar esta dependencia directa.
+- Cumplimiento hexagonal: `9/10` por estructura por capas y puertos bien mantenida
+- Calidad como plantilla: `8.5/10` por ser muy reutilizable, con algunas decisiones de composición a cuidar
+- Seguridad práctica: `8/10` porque JWT y sanitización de logs están razonablemente encaminados
+- Mantenibilidad: `8.5/10` por repo claro, documentación buena y convenciones estables
+- Escalabilidad equilibrada: `7.5/10` porque la base está bien, pero varias mejoras deben seguir siendo opcionales
 
 ---
 
-### 2. ALTA — JWT secret en archivo de configuración, no en env
+## Lo Mejor Del Proyecto
 
-**Archivo:** `jwt.config.ts` (líneas 1-7)
-
-```typescript
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const jwtConfigPath = resolve(__dirname, '../../../.env');
-const envFile = parseEnvFile(jwtConfigPath);
-export const JWT_CONFIG = {
-  secret: envFile.JWT_SECRET,
-```
-
-**Problema:** El secret se lee de `.env` en tiempo de build/compilación. Si el archivo `.env` no se carga correctamente o el secret cambia en producción, puede haber inconsistencias.
-
-**Recomendación:** Usar `@nestjs/config` con `ConfigService` para cargar el secret en runtime.
+- Separación `domain -> application -> infrastructure/presentation` clara y repetible
+- Puertos de dominio y tokens de DI bien separados
+- `src/shared`, `src/modules/iam/shared` y `src/common` tienen una semántica comprensible
+- Multi-tenancy con RLS y `AsyncLocalStorage` ya integrada
+- Documentación suficiente para que otra persona entienda el mapa del repo
+- Suite de arquitectura que complementa la disciplina de imports
 
 ---
 
-### 3. MEDIA — RLS usa variable de entorno sin validación
+## Hallazgos Vigentes
 
-**Archivo:** `member.typeorm-repository.ts` (líneas 20-21)
+### Alta prioridad
 
-```typescript
-const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
-```
+#### 1. La composición Nest debe seguir siendo didáctica
 
-**Problema:** Si `DB_RLS_RUNTIME_ROLE` no está definido y el fallback no coincide con el role real de la base de datos, las queries fallarán silenciosamente con errores de permisos.
+El principal riesgo de plantilla no está ya en las capas de dominio, sino en **cómo los módulos se conectan entre sí**. Importar módulos completos para obtener un provider enseña un patrón demasiado amplio para algo que debería ser mínimo y explícito.
 
-**Recomendación:** Validar en el bootstrap de la aplicación que el role existe.
+Estado actual:
 
----
+- Este riesgo ya fue reducido introduciendo módulos de acceso pequeños (`users-access.module.ts`, `organizations-access.module.ts`)
+- Conviene mantener esta regla en la documentación y en futuras features
 
-### 4. MEDIA — Entidades exponen passwordHash públicamente
+#### 2. La auditoría previa mezclaba deuda real con problemas ya resueltos
 
-**Archivo:** `user.entity.ts` (líneas 16-17)
+Dos hallazgos anteriores quedaron desactualizados:
 
-```typescript
-export class User {
-  public readonly id: string;
-  public readonly email: string;
-  public readonly passwordHash: string; // Expuesto!
-```
+- JWT ya no parsea `.env` manualmente como antes
+- `http-logs` ya aplica sanitización de payloads y stack traces antes de persistir
 
-**Problema:** El `passwordHash` es parte de la interfaz pública de `User`. Si un desarrollador inadvertidamente lo incluye en un DTO de respuesta, se filtraría el hash de la contraseña.
+Eso hacía que el documento anterior dejara una impresión peor que el estado real del proyecto.
 
-**Recomendación:** Considerar si `passwordHash` debería ser `#private` o movido a un método `verifyPassword()`.
+### Media prioridad
 
----
+#### 3. Falta endurecer reglas de arquitectura fuera de `src/modules`
 
-### 5. MEDIA — HTTP logs guarda bodies completos sin sanitización
+Antes el test arquitectónico revisaba solo `src/modules`. Para una plantilla fuerte también conviene vigilar:
 
-**Archivo:** `1742934000000-baseline-schema.ts` (líneas 58-61)
+- que `src/shared` no dependa de features ni de `src/common`
+- que `src/common` no empiece a absorber lógica o acoplamientos de bounded contexts
 
-```typescript
-"request_body" jsonb,
-"query_params" jsonb,
-"route_params" jsonb,
-"response_body" jsonb,
-```
+#### 4. `User.passwordHash` sigue expuesto en la entidad de dominio
 
-**Problema:** El sistema guarda request/response bodies completos. Datos sensibles (passwords, tokens, PII) podrían ser capturados.
+No es una fuga inmediata porque los DTOs de salida no lo publican, pero sigue siendo una API de dominio demasiado permisiva para una plantilla ejemplar.
 
-**Recomendación:** Implementar sanitización o blacklist de campos sensibles antes de guardar.
+#### 5. La validación del rol runtime de RLS sigue siendo mejorable
 
----
+El repositorio de members sigue usando `DB_RLS_RUNTIME_ROLE` con fallback. Funciona como baseline, pero una validación de arranque haría el template más robusto para equipos que clonen el proyecto sin conocer PostgreSQL/RLS en detalle.
 
-### 6. MEDIA — Posible inconsistencia en rehydrate()
+### Baja prioridad
 
-**Archivo:** `user.entity.ts` (líneas 69-77)
+#### 6. `rehydrate()` normaliza de nuevo datos ya persistidos
 
-```typescript
-static rehydrate(props: {
-  id: string;
-  email: string;
-  // ...
-}): User {
-  return new User({
-    id: props.id,
-    email: props.email.toLowerCase().trim(), // Aplica trim() y toLowerCase()
-```
+No es un bug claro hoy, pero sí una decisión que conviene mantener consistente con `create()` y con la base de datos.
 
-**Problema:** `rehydrate()` aplica `toLowerCase().trim()` pero la data ya viene de la base de datos. Si hubo datos guardados sin trimming (o con inconsistencias), el comportamiento podría diferir de `create()`.
+#### 7. No hay Unit of Work ni Domain Events
 
-**Recomendación:** Asegurar consistencia en cómo se normalizan los datos.
+Esto **no es una carencia del template base**. Solo pasa a ser deuda real cuando el proyecto crece y una misma operación toca múltiples agregados o integraciones.
 
 ---
 
-### 7. MEDIA — No hay manejo de transacciones a nivel de aplicación
+## Hallazgos Cerrados O Parcialmente Resueltos
 
-**Archivo:** `member.typeorm-repository.ts` (líneas 54-62)
+Estos puntos no deberían seguir tratarse como deuda principal:
 
-```typescript
-return this.dataSource.transaction(async (manager) => {
-  await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
-  await manager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
-    organizationId,
-  ]);
-```
-
-**Problema:** Las transacciones están acopladas a TypeORM en el repository. Si el dominio necesita atomicidad across multiple aggregates, no hay una abstracción de unit of work.
+- `AuthModule -> UsersModule` como dependencia amplia: mitigado con módulos de acceso más pequeños
+- `TenantModule` / `HttpLogsModule` importando features completas para reutilizar providers: mitigado con el mismo patrón
+- JWT leído desde parseo manual de `.env`: ya no aplica en esa forma
+- logs HTTP sin sanitización: ya no aplica en esa forma
+- autorización tenant y `http-logs` basada solo en roles hardcodeados: ya no aplica; ahora existe una base RBAC persistida con permisos
 
 ---
 
-### 8. MEDIA — No hay Domain Events
+## Evaluación De Las Notas (`notes.md`)
 
-**Problema:** Las entidades generan nuevos objetos (ej: `user.softDelete()`) pero no hay un evento de dominio asociado. Patrones como Saga/CQRS no son posibles actualmente.
+### Lo que sí tiene sentido
 
----
+- Pedir un proyecto ejemplar y no solo “correcto”
+- Llevar `roles` persistidos y permisos por módulo al núcleo del IAM para mejorar extensibilidad
+- Considerar auditoría de negocio y observabilidad más avanzada como crecimiento posterior
 
-### 9. BAJA — El test de arquitectura no cubre common/
+### Lo que no conviene hacer ya en el template base
 
-**Archivo:** `hexagonal-architecture.spec.ts` (líneas 54-123)
+#### Quitar `modules/iam/shared`
 
-```typescript
-const moduleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src/modules'));
-```
+No parece buena idea. Hoy esa carpeta sí tiene sentido como shared kernel interno de IAM:
 
-**Problema:** El test hexagonal solo valida `src/modules`, pero `common/` también tiene código técnico que debería seguir las mismas reglas de dependencia (ej: no depender de capas superiores).
+- excepciones de negocio reutilizadas entre features
+- contrato de password hasher compartido por `auth` y `users`
 
----
+Eliminarla haría el modelo menos explícito, no más limpio.
 
-### 10. BAJA — MembershipRole como string enum
+#### Mantener el RBAC nuevo contenido y didáctico
 
-**Archivo:** `membership-role.value-object.ts` (líneas 1-3)
+Ahora que el template ya incorpora `roles`, `permissions` y `role_permissions`, la recomendación deja de ser “posponerlo” y pasa a ser “mantenerlo contenido”.
 
-```typescript
-export type MembershipRoleName = 'owner' | 'admin' | 'manager' | 'member' | 'guest';
-export class MembershipRole {
-  readonly name: MembershipRoleName;
-```
+Recomendación:
 
-**Problema:** Funciona bien, pero no hay validación runtime exhaustiva de los valores. Podría ampliarse con un registro de roles válidos.
+- conservar una baseline seeded simple (`owner`, `admin`, `manager`, `member`, `guest`)
+- evitar meter de inmediato UI/API avanzada de administración de roles si no aporta claridad a la plantilla
 
----
+#### Meter OpenTelemetry/ELK/Grafana en el core
 
-## Resumen Ejecutivo
-
-| Categoría                    | Puntuación | Notas                                                |
-| ---------------------------- | ---------- | ---------------------------------------------------- |
-| Cumplimiento hexagonal       | 9/10       | Excelente separación de capas                        |
-| Inyección de dependencias    | 8/10       | Tokens centralizados, pequeña cohesión circular      |
-| Seguridad                    | 7/10       | RLS implementado, pero JWT secret y logs son riesgos |
-| Manejo de errores            | 9/10       | Domain exceptions + RFC 7807                         |
-| Testing                      | 8/10       | Test de arquitectura, pero coverage podría mejorar   |
-| Operaciones de base de datos | 7/10       | Migraciones + RLS, falta abstracción transaccional   |
-| Mantenibilidad               | 8/10       | Código limpio, buena documentación README            |
+Eso debería ser una capa opcional de madurez, no un requisito del template base.
 
 ---
 
-## Recomendaciones Prioritarias
+## Recomendaciones Prioritarias Reales
 
-### Alta Prioridad
+### Prioridad 1
 
-- Mover `UserRepositoryPort` a `iam/shared` para eliminar acoplamiento `AuthModule` → `UsersModule`
-- Migrar JWT secret a `ConfigService` con validación en bootstrap
+- Mantener y documentar el patrón de módulos de acceso finos para no enseñar acoplamientos Nest demasiado amplios
+- Mantener la guía de fronteras entre `common`, `shared` global e `iam/shared`
+- Hacer que la auditoría/documentación refleje el estado real del código
 
-### Media Prioridad
+### Prioridad 2
 
-- Implementar sanitización de datos sensibles en http-logs
-- Validar que `DB_RLS_RUNTIME_ROLE` exista al iniciar la aplicación
-- Considerar Domain Events para futuras necesidades de event-sourcing/CQRS
+- Reforzar el test arquitectónico para `src/common` y `src/shared`
+- Evaluar endurecimiento de `passwordHash` en la entidad `User`
+- Evaluar validación explícita del rol runtime de RLS al arrancar
+
+### Prioridad 3
+
+- endurecer el arranque y la documentación del nuevo RBAC base
+- dejar audit logs de negocio, domain events y OpenTelemetry como fase de crecimiento
+
+---
+
+## Conclusión
+
+Si el objetivo es una **plantilla hexagonal backend API equilibrada**, este repositorio va por muy buen camino. Lo correcto ahora no es “meter más arquitectura”, sino:
+
+1. afinar composición y guardrails
+2. mantener la documentación honesta
+3. resistir la tentación de volver la plantilla demasiado enterprise demasiado pronto
+
+Última revisión: 2026-04-01

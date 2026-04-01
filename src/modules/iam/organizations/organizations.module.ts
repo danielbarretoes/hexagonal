@@ -4,51 +4,70 @@
  */
 
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { OrganizationTypeOrmEntity } from './infrastructure/persistence/typeorm/entities/organization.entity';
-import { MemberTypeOrmEntity } from './infrastructure/persistence/typeorm/entities/member.entity';
-import { OrganizationTypeOrmRepository } from './infrastructure/persistence/typeorm/repositories/organization.typeorm-repository';
-import { MemberTypeOrmRepository } from './infrastructure/persistence/typeorm/repositories/member.typeorm-repository';
 import { CreateOrganizationUseCase } from './application/use-cases/create-organization.use-case';
 import { GetOrganizationByIdUseCase } from './application/use-cases/get-organization-by-id.use-case';
 import { GetPaginatedOrganizationsUseCase } from './application/use-cases/get-paginated-organizations.use-case';
 import { DeleteOrganizationUseCase } from './application/use-cases/delete-organization.use-case';
 import { RestoreOrganizationUseCase } from './application/use-cases/restore-organization.use-case';
-import { ORGANIZATION_REPOSITORY_TOKEN } from './application/ports/organization-repository.token';
-import { MEMBER_REPOSITORY_TOKEN } from './application/ports/member-repository.token';
+import { RenameOrganizationUseCase } from './application/use-cases/rename-organization.use-case';
 import { OrganizationsController } from './presentation/controllers/organizations.controller';
+import { MembersController } from './presentation/controllers/members.controller';
+import { OrganizationInvitationsController } from './presentation/controllers/organization-invitations.controller';
 import { AuthSupportModule } from '../auth/auth-support.module';
-import { TenantMembershipAccessAdapter } from './infrastructure/adapters/tenant-membership-access.adapter';
-import { TENANT_ACCESS_PORT } from '../../../shared/application/ports/tenant-access.token';
+import { OrganizationsAccessModule } from './organizations-access.module';
+import { RolesAccessModule } from '../roles/roles-access.module';
+import { TenantOrganizationPolicy } from './application/policies/tenant-organization-policy';
+import { TenantMembershipManagementPolicy } from './application/policies/tenant-membership-management.policy';
+import { PermissionGuard } from '../../../common/http/guards/permission.guard';
+import { UsersAccessModule } from '../users/users-access.module';
+import { AddMemberUseCase } from './application/use-cases/add-member.use-case';
+import { GetOrganizationMembersUseCase } from './application/use-cases/get-organization-members.use-case';
+import { ChangeMemberRoleUseCase } from './application/use-cases/change-member-role.use-case';
+import { RemoveMemberUseCase } from './application/use-cases/remove-member.use-case';
+import { CreateOrganizationInvitationUseCase } from './application/use-cases/create-organization-invitation.use-case';
+import { AcceptOrganizationInvitationUseCase } from './application/use-cases/accept-organization-invitation.use-case';
+import { AuditLogsAccessModule } from '../../observability/audit-logs/audit-logs-access.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OrganizationTypeOrmEntity, MemberTypeOrmEntity]),
+    OrganizationsAccessModule,
     AuthSupportModule,
+    RolesAccessModule,
+    UsersAccessModule,
+    AuditLogsAccessModule,
   ],
-  controllers: [OrganizationsController],
+  controllers: [OrganizationsController, MembersController, OrganizationInvitationsController],
   providers: [
-    { provide: ORGANIZATION_REPOSITORY_TOKEN, useClass: OrganizationTypeOrmRepository },
-    { provide: MEMBER_REPOSITORY_TOKEN, useClass: MemberTypeOrmRepository },
-    { provide: TENANT_ACCESS_PORT, useClass: TenantMembershipAccessAdapter },
-    OrganizationTypeOrmRepository,
-    MemberTypeOrmRepository,
-    TenantMembershipAccessAdapter,
     CreateOrganizationUseCase,
     GetOrganizationByIdUseCase,
     GetPaginatedOrganizationsUseCase,
     DeleteOrganizationUseCase,
     RestoreOrganizationUseCase,
+    RenameOrganizationUseCase,
+    AddMemberUseCase,
+    GetOrganizationMembersUseCase,
+    ChangeMemberRoleUseCase,
+    RemoveMemberUseCase,
+    CreateOrganizationInvitationUseCase,
+    AcceptOrganizationInvitationUseCase,
+    TenantOrganizationPolicy,
+    TenantMembershipManagementPolicy,
+    PermissionGuard,
   ],
   exports: [
-    ORGANIZATION_REPOSITORY_TOKEN,
-    MEMBER_REPOSITORY_TOKEN,
-    TENANT_ACCESS_PORT,
+    OrganizationsAccessModule,
     CreateOrganizationUseCase,
     GetOrganizationByIdUseCase,
     GetPaginatedOrganizationsUseCase,
     DeleteOrganizationUseCase,
     RestoreOrganizationUseCase,
+    RenameOrganizationUseCase,
+    AddMemberUseCase,
+    GetOrganizationMembersUseCase,
+    ChangeMemberRoleUseCase,
+    RemoveMemberUseCase,
+    CreateOrganizationInvitationUseCase,
+    AcceptOrganizationInvitationUseCase,
   ],
 })
 export class OrganizationsModule {}

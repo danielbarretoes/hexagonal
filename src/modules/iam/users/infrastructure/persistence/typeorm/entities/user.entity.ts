@@ -28,6 +28,9 @@ export class UserTypeOrmEntity {
   @Column()
   lastName!: string;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerifiedAt!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

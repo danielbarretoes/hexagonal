@@ -13,13 +13,14 @@ import {
   Unique,
 } from 'typeorm';
 import { UserTypeOrmEntity } from '../../../../../users/infrastructure/persistence/typeorm/entities/user.entity';
+import { RoleTypeOrmEntity } from '../../../../../roles/infrastructure/persistence/typeorm/entities/role.entity';
 import { OrganizationTypeOrmEntity } from './organization.entity';
-import { MEMBERSHIP_ROLE_NAMES } from '../../../../domain/value-objects/membership-role.value-object';
 
 @Entity('members')
 @Unique('uq_members_user_organization', ['userId', 'organizationId'])
 @Index('idx_members_organization', ['organizationId'])
 @Index('idx_members_user', ['userId'])
+@Index('idx_members_role', ['roleId'])
 export class MemberTypeOrmEntity {
   @PrimaryColumn('uuid')
   id!: string;
@@ -38,11 +39,12 @@ export class MemberTypeOrmEntity {
   @JoinColumn({ name: 'organization_id' })
   organization!: OrganizationTypeOrmEntity;
 
-  @Column({
-    type: 'varchar',
-    length: 32,
-  })
-  role!: (typeof MEMBERSHIP_ROLE_NAMES)[number];
+  @Column('uuid')
+  roleId!: string;
+
+  @ManyToOne(() => RoleTypeOrmEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'role_id' })
+  role!: RoleTypeOrmEntity;
 
   @CreateDateColumn()
   joinedAt!: Date;

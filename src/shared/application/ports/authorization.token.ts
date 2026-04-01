@@ -1,0 +1,1 @@
+export const AUTHORIZATION_PORT = Symbol('AUTHORIZATION_PORT');

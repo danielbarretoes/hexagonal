@@ -9,15 +9,15 @@ import { RecordHttpLogUseCase } from './application/use-cases/record-http-log.us
 import { HttpLogTypeOrmEntity } from './infrastructure/persistence/typeorm/entities/http-log.entity';
 import { HttpLogTypeOrmRepository } from './infrastructure/persistence/typeorm/repositories/http-log.typeorm-repository';
 import { HttpLogsController } from './presentation/controllers/http-logs.controller';
-import { HttpLogsAccessGuard } from './presentation/guards/http-logs-access.guard';
 import { HttpLogsMiddleware } from './presentation/middlewares/http-logs.middleware';
-import { OrganizationsModule } from '../../iam/organizations/organizations.module';
+import { IamAuthorizationAccessModule } from '../../iam/iam-authorization-access.module';
+import { PermissionGuard } from '../../../common/http/guards/permission.guard';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([HttpLogTypeOrmEntity]),
     AuthSupportModule,
-    OrganizationsModule,
+    IamAuthorizationAccessModule,
   ],
   controllers: [HttpLogsController],
   providers: [
@@ -27,7 +27,7 @@ import { OrganizationsModule } from '../../iam/organizations/organizations.modul
     GetHttpLogByIdUseCase,
     GetHttpLogsByTraceIdUseCase,
     GetPaginatedHttpLogsUseCase,
-    HttpLogsAccessGuard,
+    PermissionGuard,
     HttpLogsMiddleware,
   ],
   exports: [

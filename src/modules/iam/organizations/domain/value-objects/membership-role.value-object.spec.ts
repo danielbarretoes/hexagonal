@@ -1,22 +1,37 @@
-import { MembershipRole, MEMBERSHIP_ROLE_NAMES } from './membership-role.value-object';
-import { InvalidMembershipRoleException } from '../../../shared/domain/exceptions';
+import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
+import { MembershipRole } from './membership-role.value-object';
 
 describe('MembershipRole', () => {
-  it('creates all supported roles', () => {
-    for (const roleName of MEMBERSHIP_ROLE_NAMES) {
-      const role = MembershipRole.create(roleName);
-      expect(role.name).toBe(roleName);
-    }
+  function createPersistedRole(permissionCodes: readonly string[]) {
+    return {
+      id: 'role-owner',
+      code: 'owner',
+      permissions: permissionCodes,
+    };
+  }
+
+  it('wraps a persisted IAM role and exposes its permissions', () => {
+    const role = MembershipRole.create(
+      createPersistedRole([
+        PERMISSION_CODES.IAM_USERS_READ,
+        PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ,
+      ]),
+    );
+
+    expect(role.id).toBe('role-owner');
+    expect(role.name).toBe('owner');
+    expect(role.permissions).toEqual([
+      PERMISSION_CODES.IAM_USERS_READ,
+      PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ,
+    ]);
   });
 
-  it('exposes permissions for owner', () => {
-    const role = MembershipRole.create('owner');
+  it('checks permissions by code', () => {
+    const role = MembershipRole.create(
+      createPersistedRole([PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ]),
+    );
 
-    expect(role.can('canCreate')).toBe(true);
-    expect(role.can('canDelete')).toBe(true);
-  });
-
-  it('rejects invalid roles', () => {
-    expect(() => MembershipRole.create('super-admin')).toThrow(InvalidMembershipRoleException);
+    expect(role.hasPermission(PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ)).toBe(true);
+    expect(role.hasPermission(PERMISSION_CODES.IAM_USERS_WRITE)).toBe(false);
   });
 });

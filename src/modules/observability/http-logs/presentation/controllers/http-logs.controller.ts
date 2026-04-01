@@ -15,11 +15,14 @@ import { HttpLogNotFoundException } from '../../domain/exceptions/http-log-not-f
 import { HttpLogResponseDto } from '../dto/http-log-response.dto';
 import { ListHttpLogsQueryDto } from '../dto/list-http-logs-query.dto';
 import { PaginatedHttpLogsResponseDto } from '../dto/paginated-http-logs-response.dto';
-import { HttpLogsAccessGuard } from '../guards/http-logs-access.guard';
+import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
+import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
+import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
 
 @ApiTags('HTTP Logs')
 @ApiBearerAuth('bearer')
-@UseGuards(JwtAuthGuard, HttpLogsAccessGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
+@RequirePermissions(PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ)
 @Controller({ path: 'http-logs', version: '1' })
 export class HttpLogsController {
   constructor(

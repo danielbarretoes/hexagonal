@@ -18,5 +18,5 @@ if (isProduction && !configuredSecret) {
 
 export const JWT_CONFIG: JwtConfig = {
   secret: configuredSecret || 'hexagonal-development-secret-change-before-production-use',
-  expiresIn: (process.env.JWT_EXPIRES_IN as StringValue | undefined) ?? '7d',
+  expiresIn: (process.env.JWT_EXPIRES_IN as StringValue | undefined) ?? '15m',
 };

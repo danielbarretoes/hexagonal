@@ -12,6 +12,7 @@ export interface UserQueryOptions {
 
 export interface UserRepositoryPort {
   findById(id: string, options?: UserQueryOptions): Promise<User | null>;
+  findManyByIds(ids: readonly string[], options?: UserQueryOptions): Promise<User[]>;
   findByEmail(email: string, options?: UserQueryOptions): Promise<User | null>;
   findPaginated(page: number, limit: number): Promise<Paginated<User>>;
   create(props: CreateUserProps & { id: string }): Promise<User>;

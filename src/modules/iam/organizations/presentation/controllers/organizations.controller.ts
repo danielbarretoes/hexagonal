@@ -32,12 +32,19 @@ import { GetOrganizationByIdUseCase } from '../../application/use-cases/get-orga
 import { GetPaginatedOrganizationsUseCase } from '../../application/use-cases/get-paginated-organizations.use-case';
 import { DeleteOrganizationUseCase } from '../../application/use-cases/delete-organization.use-case';
 import { RestoreOrganizationUseCase } from '../../application/use-cases/restore-organization.use-case';
+import { RenameOrganizationUseCase } from '../../application/use-cases/rename-organization.use-case';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
 import { PaginationQueryDto } from '../../../../../shared/contracts/http/pagination-query.dto';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { OrganizationNotFoundException } from '../../../shared/domain/exceptions';
 import { OrganizationResponseDto } from '../dto/organization-response.dto';
 import { PaginatedOrganizationsResponseDto } from '../dto/paginated-organizations-response.dto';
+import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
+import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
+import { CurrentOrganizationId } from '../../../../../common/http/decorators/current-organization-id.decorator';
+import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
+import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
+import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
 
 @ApiTags('Organizations')
 @Controller({ path: 'organizations', version: '1' })
@@ -48,82 +55,116 @@ export class OrganizationsController {
     private readonly getPaginatedOrganizationsUseCase: GetPaginatedOrganizationsUseCase,
     private readonly deleteOrganizationUseCase: DeleteOrganizationUseCase,
     private readonly restoreOrganizationUseCase: RestoreOrganizationUseCase,
+    private readonly renameOrganizationUseCase: RenameOrganizationUseCase,
   ) {}
 
-  @Post()
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Create a new organization' })
-  @ApiBody({ type: CreateOrganizationDto })
-  @ApiCreatedResponse({ type: OrganizationResponseDto })
-  async create(@Body() body: CreateOrganizationDto) {
-    const organization = await this.createOrganizationUseCase.execute(body);
-
+  private toResponse(organization: { id: string; name: string; createdAt: Date; updatedAt: Date }) {
     return {
       id: organization.id,
       name: organization.name,
       createdAt: organization.createdAt,
       updatedAt: organization.updatedAt,
     };
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Create a new organization and assign the caller as owner' })
+  @ApiBody({ type: CreateOrganizationDto })
+  @ApiCreatedResponse({ type: OrganizationResponseDto })
+  async create(@Body() body: CreateOrganizationDto, @CurrentUser() user: AuthenticatedUserPayload) {
+    const organization = await this.createOrganizationUseCase.execute({
+      ...body,
+      ownerUserId: user.userId,
+    });
+
+    return this.toResponse(organization);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'List organizations with pagination' })
+  @ApiOperation({ summary: 'List organizations accessible to the authenticated user' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiOkResponse({ type: PaginatedOrganizationsResponseDto })
-  async getPaginated(@Query() query: PaginationQueryDto) {
-    return this.getPaginatedOrganizationsUseCase.execute(query.page, query.limit);
+  async getPaginated(
+    @CurrentUser() user: AuthenticatedUserPayload,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.getPaginatedOrganizationsUseCase.execute(user.userId, query.page, query.limit);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_READ)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Get an organization by id' })
+  @ApiOperation({ summary: 'Get the current organization by id' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: OrganizationResponseDto })
-  async getById(@Param('id', new ParseUUIDPipe()) id: string) {
-    const organization = await this.getOrganizationByIdUseCase.execute(id);
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentOrganizationId() scopedOrganizationId: string,
+  ) {
+    const organization = await this.getOrganizationByIdUseCase.execute(id, scopedOrganizationId);
 
     if (!organization) {
       throw new OrganizationNotFoundException(id);
     }
 
-    return {
-      id: organization.id,
-      name: organization.name,
-      createdAt: organization.createdAt,
-      updatedAt: organization.updatedAt,
-    };
+    return this.toResponse(organization);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Rename the current organization' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiBody({ type: CreateOrganizationDto })
+  @ApiOkResponse({ type: OrganizationResponseDto })
+  async rename(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: CreateOrganizationDto,
+    @CurrentOrganizationId() scopedOrganizationId: string,
+  ) {
+    const organization = await this.renameOrganizationUseCase.execute({
+      organizationId: id,
+      scopedOrganizationId,
+      name: body.name,
+    });
+
+    return this.toResponse(organization);
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Soft delete an organization' })
+  @ApiOperation({ summary: 'Soft delete the current organization' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse()
-  async delete(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
-    await this.deleteOrganizationUseCase.execute(id);
+  async delete(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentOrganizationId() scopedOrganizationId: string,
+  ): Promise<void> {
+    await this.deleteOrganizationUseCase.execute(id, scopedOrganizationId);
   }
 
   @Patch(':id/restore')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Restore a soft deleted organization' })
+  @ApiOperation({ summary: 'Restore the current organization' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: OrganizationResponseDto })
-  async restore(@Param('id', new ParseUUIDPipe()) id: string) {
-    const organization = await this.restoreOrganizationUseCase.execute(id);
-
-    return {
-      id: organization.id,
-      name: organization.name,
-      createdAt: organization.createdAt,
-      updatedAt: organization.updatedAt,
-    };
+  async restore(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentOrganizationId() scopedOrganizationId: string,
+  ) {
+    const organization = await this.restoreOrganizationUseCase.execute(id, scopedOrganizationId);
+    return this.toResponse(organization);
   }
 }

@@ -10,12 +10,12 @@ import { MemberRepositoryPort } from '../../../../domain/ports/member.repository
 import { MemberMapper } from '../mappers/member.mapper';
 import type { Member } from '../../../../domain/entities/member.entity';
 import { Paginated } from '../../../../../../../shared/domain/primitives/paginated';
+import { TenantContextRequiredException } from '../../../../../../../shared/domain/exceptions';
 import { TenantContext } from '../../../../../../../common/tenant/tenant-context';
 import {
   MemberByIdNotFoundException,
   MemberNotFoundException,
 } from '../../../../../shared/domain/exceptions';
-import type { MembershipRoleName } from '../../../../domain/value-objects/membership-role.value-object';
 
 const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
 
@@ -44,10 +44,17 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
   private async runWithinTenantScope<T>(
     operation: (repository: Repository<MemberTypeOrmEntity>) => Promise<T>,
     organizationIdOverride?: string,
+    options?: {
+      allowWithoutTenant?: boolean;
+    },
   ): Promise<T> {
     const organizationId = organizationIdOverride || TenantContext.getOrganizationId();
 
     if (!organizationId) {
+      if (!options?.allowWithoutTenant) {
+        throw new TenantContextRequiredException('members');
+      }
+
       return operation(this.repository);
     }
 
@@ -65,7 +72,13 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     const entity = await this.runWithinTenantScope((repository) =>
       repository.findOne({
         where: this.withTenantScope({ id }),
-        relations: ['user', 'organization'],
+        relations: {
+          user: true,
+          organization: true,
+          role: {
+            permissions: true,
+          },
+        },
       }),
     );
     return entity ? MemberMapper.toDomain(entity) : null;
@@ -76,7 +89,13 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
       (repository) =>
         repository.findOne({
           where: this.withTenantScope({ userId, organizationId }),
-          relations: ['user', 'organization'],
+          relations: {
+            user: true,
+            organization: true,
+            role: {
+              permissions: true,
+            },
+          },
         }),
       organizationId,
     );
@@ -84,11 +103,21 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
   }
 
   async findByUser(userId: string): Promise<Member[]> {
-    const entities = await this.runWithinTenantScope((repository) =>
-      repository.find({
-        where: this.withTenantScope({ userId }),
-        relations: ['user', 'organization'],
-      }),
+    const entities = await this.runWithinTenantScope(
+      (repository) =>
+        repository.find({
+          where: this.withTenantScope({ userId }),
+          order: { joinedAt: 'DESC' },
+          relations: {
+            user: true,
+            organization: true,
+            role: {
+              permissions: true,
+            },
+          },
+        }),
+      undefined,
+      { allowWithoutTenant: true },
     );
     return entities.map(MemberMapper.toDomain);
   }
@@ -98,7 +127,14 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
       (repository) =>
         repository.find({
           where: this.withTenantScope({ organizationId }),
-          relations: ['user', 'organization'],
+          order: { joinedAt: 'DESC' },
+          relations: {
+            user: true,
+            organization: true,
+            role: {
+              permissions: true,
+            },
+          },
         }),
       organizationId,
     );
@@ -113,28 +149,36 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
         skip,
         take: limit,
         order: { joinedAt: 'DESC' },
-        relations: ['user', 'organization'],
+        relations: {
+          user: true,
+          organization: true,
+          role: {
+            permissions: true,
+          },
+        },
       }),
     );
     return Paginated.create(entities.map(MemberMapper.toDomain), total, page, limit);
   }
 
-  async create(data: {
-    userId: string;
-    organizationId: string;
-    role: MembershipRoleName;
-  }): Promise<Member> {
+  async create(data: { userId: string; organizationId: string; roleId: string }): Promise<Member> {
     const fullEntity = await this.runWithinTenantScope(async (repository) => {
       const entity = repository.create({
         id: crypto.randomUUID(),
         userId: data.userId,
         organizationId: data.organizationId,
-        role: data.role,
+        roleId: data.roleId,
       });
       const saved = await repository.save(entity);
       return repository.findOne({
         where: { id: saved.id },
-        relations: ['user', 'organization'],
+        relations: {
+          user: true,
+          organization: true,
+          role: {
+            permissions: true,
+          },
+        },
       });
     }, data.organizationId);
 
@@ -144,12 +188,18 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     return MemberMapper.toDomain(fullEntity);
   }
 
-  async update(id: string, data: { role?: MembershipRoleName }): Promise<Member> {
+  async update(id: string, data: { roleId?: string }): Promise<Member> {
     const entity = await this.runWithinTenantScope(async (repository) => {
-      await repository.update(id, { role: data.role });
+      await repository.update(id, { roleId: data.roleId });
       return repository.findOne({
         where: this.withTenantScope({ id }),
-        relations: ['user', 'organization'],
+        relations: {
+          user: true,
+          organization: true,
+          role: {
+            permissions: true,
+          },
+        },
       });
     });
 

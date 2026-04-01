@@ -5,12 +5,14 @@ Reusable NestJS IAM foundation built with a strict hexagonal style.
 It currently includes:
 
 - `users`, `organizations`, and `auth` as explicit IAM features
+- `roles` as the RBAC foundation for IAM permissions
 - `http_logs` as an explicit observability feature
 - strict `domain -> application -> infrastructure/presentation` boundaries
 - RFC 7807 problem details with `traceId`
 - Swagger / OpenAPI documentation
 - TypeORM adapters, PostgreSQL migrations, and real e2e tests
 - JWT auth with password hashing
+- persisted RBAC roles and permissions seeded from the baseline migration
 - soft delete + restore for `users` and `organizations`
 - PostgreSQL RLS foundation for tenant-scoped `members`
 - AsyncLocalStorage tenant context for request-scoped tenant propagation
@@ -33,9 +35,14 @@ src/
 │   └── migrations/
 ├── modules/
 │   ├── iam/
+│   │   ├── iam-authorization-access.module.ts
 │   │   ├── auth/
+│   │   │   └── auth.module.ts
 │   │   ├── organizations/
+│   │   │   └── organizations-access.module.ts
+│   │   ├── roles/
 │   │   ├── users/
+│   │   │   └── users-access.module.ts
 │   │   └── shared/                 # shared kernel inside IAM
 │   └── observability/
 │       └── http-logs/
@@ -43,8 +50,17 @@ src/
     ├── contracts/
     └── domain/
 test/
-├── app.e2e-spec.ts
+├── auth.e2e-spec.ts
+├── email-verification.e2e-spec.ts
+├── http-logs.e2e-spec.ts
+├── members.e2e-spec.ts
+├── organization-invitations.e2e-spec.ts
+├── organizations.e2e-spec.ts
+├── password-recovery.e2e-spec.ts
 ├── rls.e2e-spec.ts
+├── sessions.e2e-spec.ts
+├── tenant-authorization.e2e-spec.ts
+├── users.e2e-spec.ts
 └── support/
 ```
 
@@ -52,12 +68,13 @@ test/
 
 ### Request flow
 
-1. HTTP request enters Nest controller in `presentation`
-2. Controller validates DTO and calls a use case in `application`
-3. Use case orchestrates business behavior using ports
-4. Infrastructure adapters implement those ports with TypeORM, bcrypt, JWT, etc.
-5. Domain objects stay framework-free
-6. Errors are translated to RFC 7807 in the global HTTP filter
+1. `JwtAuthGuard` authenticates protected routes
+2. `PermissionGuard` resolves `@RequirePermissions(...)` metadata for tenant-scoped operations
+3. `TenantInterceptor` validates the effective tenant and opens the async tenant context
+4. Controller validates DTOs and calls a use case in `application`
+5. Use cases orchestrate ports plus tenant policies for sensitive operations
+6. Infrastructure adapters implement those ports with TypeORM, bcrypt, JWT, etc.
+7. Errors are translated to RFC 7807 in the global HTTP filter
 
 ### Layer responsibilities
 
@@ -102,6 +119,14 @@ test/
 - shared kernel only inside IAM
 - reusable between `auth`, `users`, and `organizations`
 
+provider-only access modules
+
+- `users-access.module.ts`, `organizations-access.module.ts`, and `iam-authorization-access.module.ts`
+- expose minimal DI providers to other modules without exporting the full feature module
+- keep Nest module dependencies thinner and more explicit
+- solve Nest composition, not rich business orchestration between sibling features
+- if a workflow needs multiple sibling features inside the same bounded context, prefer a context-level application service/facade over direct feature-internal imports
+
 `src/common`
 
 - technical cross-cutting concerns
@@ -115,6 +140,7 @@ What already belongs in global `shared` and should stay there:
 - pagination primitives
 - generic pagination DTO contracts
 - base domain exception
+- shared authorization permission codes and contracts
 
 What already belongs in `modules/iam/shared` and should stay there:
 
@@ -138,32 +164,52 @@ Why:
 
 ### Users
 
-- registration
-- login
-- paginated listing
-- get by id
-- soft delete
-- restore
+- `POST /users/self-register` for standalone identity bootstrap
+- tenant-scoped `POST /users` to create another user inside the current organization
+- tenant-scoped `GET /users` and `GET /users/:id`
+- tenant-scoped `PATCH /users/:id`, `DELETE /users/:id`, and `PATCH /users/:id/restore`
 
 ### Organizations
 
-- create
-- get by id
-- paginated listing
-- soft delete
-- restore
+- `POST /organizations` creates a tenant and assigns the caller as `owner`
+- `GET /organizations` lists organizations where the caller has membership
+- tenant-scoped `GET /organizations/:id`
+- tenant-scoped `PATCH /organizations/:id` for rename
+- tenant-scoped `DELETE /organizations/:id` and `PATCH /organizations/:id/restore`
 
 ### Auth
 
-- JWT access token
+- short-lived JWT access token
+- opaque refresh token with rotation backed by `auth_sessions`
+- `POST /auth/logout` and `POST /auth/logout-all` for refresh-session revocation
+- password reset one-time tokens backed by `user_action_tokens`
+- email verification one-time tokens backed by `user_action_tokens`
+- reset and verification tokens only exposed in test mode
+- rate limiting on auth endpoints
 - bcrypt password hashing
 - JWT guard
 
 ### Memberships
 
 - link user to organization
-- tenant-scoped role value object
+- tenant-scoped membership linked to a persisted role
+- tenant-scoped `GET /members`, `POST /members`, `PATCH /members/:id/role`, `DELETE /members/:id`
+- last-owner protection prevents removing or demoting the final `owner`
+- role permissions resolved through the RBAC seed tables
 - PostgreSQL RLS on `members`
+
+### Invitations
+
+- tenant-scoped `POST /organization-invitations` to invite an email into the current organization
+- authenticated `POST /organization-invitations/accept` to accept an invite after self-registration/login
+- invitations carry the target organization and role to assign on acceptance
+- PostgreSQL RLS on tenant-managed invitation access plus invitation-id scoped acceptance lookup
+
+### Roles
+
+- persisted `roles`, `permissions`, and `role_permissions`
+- seeded default roles: `owner`, `admin`, `manager`, `member`, `guest`
+- permission-based authorization such as `observability.http_logs.read`
 
 ### HTTP Logs
 
@@ -171,12 +217,19 @@ Why:
 - stores request body, query, params, response, error message, error trace, duration, traceId
 - stores `userId` and `organizationId` when available
 - supports lookup by `id`, `traceId`, and paginated filtering by `createdFrom`, `createdTo`, and `statusFamily`
+- read access is tenant-scoped and reinforced by PostgreSQL RLS plus fail-closed repository access
+
+### Audit Logs
+
+- separate `audit_logs` table for administrative actions
+- records membership changes, invitation lifecycle, and session revocation events
+- complements `http_logs` instead of mixing business auditability with request observability
 
 ## Database Workflow
 
 Detailed guide:
 
-- [Database Workflow](/Users/danielbarreto/Desktop/Code/hexagonal/docs/database-workflow.md)
+- [Database Workflow](./docs/database-workflow.md)
 
 Commands:
 
@@ -191,6 +244,7 @@ Key rules:
 - `DB_MIGRATIONS_RUN=true` lets runtime bootstrap from migrations
 - e2e tests rebuild schema from migrations
 - RLS currently applies to `members`, which is the tenant-scoped table in the current model
+- the baseline migration also seeds RBAC roles and permissions used by tenant authorization
 
 ### Environment files
 
@@ -227,14 +281,21 @@ If you had an older local database created from pre-squash migrations, reset tha
 
 Run all of these before considering work complete:
 
-- `npm run lint`
+- `npm run lint:check`
 - `npm run build`
+- `npm run test:arch`
 - `npm test -- --runInBand`
 - `npm run test:e2e -- --runInBand`
 
+Or run the full local contract in one command:
+
+- `npm run test:all`
+
+The repository also ships a GitHub Actions workflow that runs the same contract with PostgreSQL on pushes and pull requests.
+
 ## Adding A New Feature
 
-When adding a new IAM feature such as `roles`, `invitations`, or `sessions`, follow this order:
+When adding a new IAM feature such as `invitations`, `sessions`, or `api-keys`, follow this order:
 
 1. Create the feature folder under `src/modules/iam/<feature>`
 2. Model the domain first:
@@ -255,6 +316,7 @@ If the new feature is not business-domain specific, do not force it into IAM.
 Examples:
 
 - `sessions` likely belongs in IAM
+- `roles` already belongs in IAM as the baseline RBAC feature
 - `http_logs` belongs in `observability`
 - technical request/response helpers likely belong in `common`
 
@@ -263,6 +325,8 @@ Do not:
 - import Nest or TypeORM in domain
 - put tokens inside `*.module.ts`
 - put business rules in `common`
+- import a full feature module only to reuse a single provider; prefer a provider-only access module
+- use access modules for DI wiring, not as a substitute for a context-level orchestration layer when workflows start crossing multiple sibling features
 - create empty folders “for the future”
 - bypass ports by importing adapters directly into use cases
 
@@ -286,8 +350,10 @@ Checklist:
 - the effective tenant is validated against real membership before request-scoped tenant context is opened
 - `members` uses PostgreSQL RLS with `app.current_organization_id`
 - repository code sets tenant context before tenant-scoped member queries
+- tenant-scoped HTTP routes use `@RequirePermissions(...)` plus the shared `PermissionGuard`
+- sensitive application flows add tenant policies on top of guards, instead of encoding all rules in HTTP
 - `http_logs` read endpoints require an authenticated user plus `x-organization-id`
-- `http_logs` reads are restricted to privileged tenant members (`owner`, `admin`, `manager`)
+- `http_logs` reads are restricted by the `observability.http_logs.read` permission
 - if you add a new tenant-scoped table, extend migrations and repository code with the same pattern
 
 ## Error Handling Rules
@@ -316,6 +382,14 @@ If you want to push this template further:
 - add refresh tokens / sessions
 - add more tenant-scoped tables with RLS
 - harden authorization policies per feature as more bounded contexts appear
+
+Not part of the base template by default:
+
+- custom role management workflows beyond the seeded baseline
+- audit/business event logs
+- OpenTelemetry or external observability stacks
+
+Treat these as opt-in evolutions once the base template stays small, teachable, and stable.
 
 ## Architecture Verdict
 

@@ -48,7 +48,7 @@ Best practice in this template:
 
 ## How Environment Loading Works
 
-Environment loading is centralized in [load-env.ts](/Users/danielbarreto/Desktop/Code/hexagonal/src/config/env/load-env.ts).
+Environment loading is centralized in [`src/config/env/load-env.ts`](../src/config/env/load-env.ts).
 
 Rules:
 
@@ -89,7 +89,7 @@ Examples:
 
 Because of that, most columns do not need an explicit `name` option in the entity decorator.
 
-That is why entities such as [user.entity.ts](/Users/danielbarreto/Desktop/Code/hexagonal/src/modules/iam/users/infrastructure/persistence/typeorm/entities/user.entity.ts) and [organization.entity.ts](/Users/danielbarreto/Desktop/Code/hexagonal/src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/organization.entity.ts) intentionally keep property names simple and let the naming strategy do the mapping.
+That is why entities such as [`src/modules/iam/users/infrastructure/persistence/typeorm/entities/user.entity.ts`](../src/modules/iam/users/infrastructure/persistence/typeorm/entities/user.entity.ts) and [`src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/organization.entity.ts`](../src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/organization.entity.ts) intentionally keep property names simple and let the naming strategy do the mapping.
 
 ### When explicit names are still useful
 
@@ -100,7 +100,7 @@ You should still use explicit names when:
 - the database uses a legacy or non-standard column name
 - you need a name different from the default generated one
 
-For example, [member.entity.ts](/Users/danielbarreto/Desktop/Code/hexagonal/src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/member.entity.ts) keeps explicit `@JoinColumn({ name: 'user_id' })` and `@JoinColumn({ name: 'organization_id' })` so the relation uses the already-declared FK columns instead of generating a different join column.
+For example, [`src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/member.entity.ts`](../src/modules/iam/organizations/infrastructure/persistence/typeorm/entities/member.entity.ts) keeps explicit `@JoinColumn({ name: 'user_id' })`, `@JoinColumn({ name: 'organization_id' })`, and `@JoinColumn({ name: 'role_id' })` so the relation uses the already-declared FK columns instead of generating different join columns.
 
 ## Why Tables Are Not Created On Startup
 
@@ -169,6 +169,8 @@ The e2e suite:
 
 You do not normally need to migrate the test database manually.
 
+In CI, the repository workflow starts PostgreSQL as a service container and runs the same e2e suite against it.
+
 ## Migration Commands
 
 ### Run pending migrations
@@ -195,13 +197,14 @@ Use revert carefully, especially if the database already contains important data
 
 This repository intentionally keeps a single baseline migration:
 
-- [1742934000000-baseline-schema.ts](/Users/danielbarreto/Desktop/Code/hexagonal/src/database/migrations/1742934000000-baseline-schema.ts)
+- [`src/database/migrations/1742934000000-baseline-schema.ts`](../src/database/migrations/1742934000000-baseline-schema.ts)
 
 Why:
 
 - a fresh clone should be simple to bootstrap
 - a template repository should not carry a long migration history unless that history teaches something important
 - the current migration represents the full schema as it exists today
+- the baseline now seeds RBAC roles and permissions so the authorization model works immediately after bootstrap
 
 That means the previous incremental migration chain was intentionally squashed into one baseline file.
 
@@ -210,13 +213,13 @@ That means the previous incremental migration chain was intentionally squashed i
 If you clone the repository and start from scratch:
 
 1. create the local database if it does not exist
-2. run:
+1. run:
 
 ```bash
 npm run db:migrate
 ```
 
-3. start the app:
+1. start the app:
 
 ```bash
 npm run start:dev
@@ -306,13 +309,13 @@ npm run start:dev
 ### If you changed the schema in code
 
 1. create or update the migration file
-2. run:
+1. run:
 
 ```bash
 npm run db:migrate
 ```
 
-3. run checks:
+1. run checks:
 
 ```bash
 npm run build
@@ -343,13 +346,18 @@ Then restart the app.
 
 ## RLS And Tenant-Scoped Data
 
-The current RLS-enabled tenant-scoped table is `members`.
+The current RLS-enabled tenant-scoped tables are:
+
+- `members`
+- `http_logs` for tenant-scoped read queries
 
 Important:
 
 - migrations create the required policies
+- migrations also seed `roles`, `permissions`, and `role_permissions` for the RBAC baseline
 - authenticated requests validate the effective tenant before request-scoped tenant context is opened
 - repository code sets the required tenant context for tenant-scoped operations
+- tenant-scoped repositories fail closed when they are called without an effective tenant
 - repository code sets the local DB role used by the policy
 - e2e tests verify that RLS works against the real PostgreSQL test database
 
@@ -357,8 +365,9 @@ For `http_logs` read endpoints:
 
 - the API requires authentication
 - the caller must provide `x-organization-id`
-- the caller must have a privileged membership in that tenant
+- the caller must have a membership whose persisted role grants `observability.http_logs.read`
 - queries are filtered by the validated effective tenant, not by the raw header alone
+- the repository opens a runtime-role transaction before reading so PostgreSQL also enforces the tenant partition
 
 If you add a new tenant-scoped table later, you must extend:
 

@@ -1,46 +1,45 @@
 /**
  * Membership role value object.
- * Keeps authorization role semantics inside the organizations feature instead of
- * depending on a global users/roles persistence model.
+ * Wraps the persisted IAM role assigned to a tenant membership.
  */
 
-import { InvalidMembershipRoleException } from '../../../shared/domain/exceptions';
+import type { PermissionCode } from '../../../../../shared/domain/authorization/permission-codes';
 
-export const MEMBERSHIP_ROLE_NAMES = ['owner', 'admin', 'manager', 'member', 'guest'] as const;
-
-export type MembershipRoleName = (typeof MEMBERSHIP_ROLE_NAMES)[number];
-
-export interface MembershipPermissions {
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
-  canView: boolean;
+export interface MembershipRoleSnapshot {
+  id: string;
+  code: string;
+  permissions: readonly PermissionCode[];
 }
 
-const MEMBERSHIP_PERMISSIONS: Record<MembershipRoleName, MembershipPermissions> = {
-  owner: { canCreate: true, canEdit: true, canDelete: true, canView: true },
-  admin: { canCreate: true, canEdit: true, canDelete: true, canView: true },
-  manager: { canCreate: true, canEdit: true, canDelete: false, canView: true },
-  member: { canCreate: false, canEdit: false, canDelete: false, canView: true },
-  guest: { canCreate: false, canEdit: false, canDelete: false, canView: false },
-};
-
 export class MembershipRole {
-  private constructor(public readonly name: MembershipRoleName) {}
-
-  static create(name: string): MembershipRole {
-    if (!MEMBERSHIP_ROLE_NAMES.includes(name as MembershipRoleName)) {
-      throw new InvalidMembershipRoleException(name);
-    }
-
-    return new MembershipRole(name as MembershipRoleName);
+  private constructor(private readonly snapshot: MembershipRoleSnapshot) {
+    Object.freeze(this);
   }
 
-  get permissions(): MembershipPermissions {
-    return MEMBERSHIP_PERMISSIONS[this.name];
+  static create(snapshot: MembershipRoleSnapshot): MembershipRole {
+    return new MembershipRole({
+      ...snapshot,
+      permissions: [...snapshot.permissions],
+    });
   }
 
-  can(action: keyof MembershipPermissions): boolean {
-    return this.permissions[action];
+  get id(): string {
+    return this.snapshot.id;
+  }
+
+  get name(): string {
+    return this.snapshot.code;
+  }
+
+  get permissions(): readonly PermissionCode[] {
+    return this.snapshot.permissions;
+  }
+
+  hasPermission(permissionCode: PermissionCode): boolean {
+    return this.snapshot.permissions.includes(permissionCode);
+  }
+
+  hasAnyPermission(permissionCodes: readonly PermissionCode[]): boolean {
+    return permissionCodes.some((permissionCode) => this.hasPermission(permissionCode));
   }
 }

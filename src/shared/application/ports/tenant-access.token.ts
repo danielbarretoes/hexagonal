@@ -1,1 +1,0 @@
-export const TENANT_ACCESS_PORT = Symbol('TENANT_ACCESS_PORT');

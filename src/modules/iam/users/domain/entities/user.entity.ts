@@ -8,6 +8,7 @@ export interface CreateUserProps {
   readonly passwordHash: string;
   readonly firstName: string;
   readonly lastName: string;
+  readonly emailVerifiedAt?: Date | null;
 }
 
 export class User {
@@ -16,6 +17,7 @@ export class User {
   public readonly passwordHash: string;
   public readonly firstName: string;
   public readonly lastName: string;
+  public readonly emailVerifiedAt: Date | null;
   public readonly deletedAt: Date | null;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
@@ -26,6 +28,7 @@ export class User {
     passwordHash: string;
     firstName: string;
     lastName: string;
+    emailVerifiedAt: Date | null;
     deletedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -35,6 +38,7 @@ export class User {
     this.passwordHash = props.passwordHash;
     this.firstName = props.firstName;
     this.lastName = props.lastName;
+    this.emailVerifiedAt = props.emailVerifiedAt;
     this.deletedAt = props.deletedAt;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
@@ -49,6 +53,7 @@ export class User {
       passwordHash: props.passwordHash,
       firstName: props.firstName.trim(),
       lastName: props.lastName.trim(),
+      emailVerifiedAt: props.emailVerifiedAt ?? null,
       deletedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -61,6 +66,7 @@ export class User {
     passwordHash: string;
     firstName: string;
     lastName: string;
+    emailVerifiedAt: Date | null;
     deletedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -71,6 +77,7 @@ export class User {
       passwordHash: props.passwordHash,
       firstName: props.firstName.trim(),
       lastName: props.lastName.trim(),
+      emailVerifiedAt: props.emailVerifiedAt,
       deletedAt: props.deletedAt,
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
@@ -83,6 +90,10 @@ export class User {
 
   get isDeleted(): boolean {
     return this.deletedAt !== null;
+  }
+
+  get isEmailVerified(): boolean {
+    return this.emailVerifiedAt !== null;
   }
 
   softDelete(): User {
@@ -106,6 +117,26 @@ export class User {
       ...this,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      updatedAt: new Date(),
+    });
+  }
+
+  updatePassword(passwordHash: string): User {
+    return new User({
+      ...this,
+      passwordHash,
+      updatedAt: new Date(),
+    });
+  }
+
+  verifyEmail(): User {
+    if (this.isEmailVerified) {
+      return this;
+    }
+
+    return new User({
+      ...this,
+      emailVerifiedAt: new Date(),
       updatedAt: new Date(),
     });
   }
