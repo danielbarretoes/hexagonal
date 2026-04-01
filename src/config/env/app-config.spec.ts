@@ -33,6 +33,17 @@ describe('getAppConfig', () => {
       AUTH_RATE_LIMIT_LIMIT: '10',
       LOG_LEVEL: 'debug',
       LOG_JSON: 'false',
+      LOG_SERVICE_NAME: 'hexagonal-api-test',
+      EMAIL_ENABLED: 'false',
+      EMAIL_SES_REGION: 'us-east-1',
+      EMAIL_FROM_EMAIL: 'noreply@hexagonal.test',
+      EMAIL_FROM_NAME: 'Hexagonal Test',
+      EMAIL_BRAND_NAME: 'Hexagonal Test',
+      APP_PUBLIC_URL: 'https://app.hexagonal.test',
+      EMAIL_PASSWORD_RESET_PATH: '/reset-password',
+      EMAIL_VERIFICATION_PATH: '/verify-email',
+      EMAIL_INVITATION_PATH: '/accept-invitation',
+      EMAIL_WELCOME_PATH: '/login',
       HELMET_ENABLED: 'true',
       CORS_ENABLED: 'true',
       CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
@@ -53,7 +64,11 @@ describe('getAppConfig', () => {
     expect(config.port).toBe(3001);
     expect(config.database.port).toBe(5432);
     expect(config.auth.rateLimitingEnabled).toBe(false);
+    expect(config.auth.exposePrivateTokens).toBe(false);
     expect(config.logging.enabledLevels).toEqual(['fatal', 'error', 'warn', 'log', 'debug']);
+    expect(config.logging.serviceName).toBe('hexagonal-api-test');
+    expect(config.email.provider).toBe('ses');
+    expect(config.email.appPublicUrl).toBe('https://app.hexagonal.test');
     expect(config.http.corsOrigins).toEqual([
       'https://app.example.com',
       'https://admin.example.com',
@@ -70,5 +85,14 @@ describe('getAppConfig', () => {
     expect(() => getAppConfig('development')).toThrow(
       'DB_POOL_MIN cannot be greater than DB_POOL_MAX',
     );
+  });
+
+  it('defaults to exposing private tokens in non-production when email is disabled', async () => {
+    delete process.env.AUTH_EXPOSE_PRIVATE_TOKENS;
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getAppConfig } = require('./app-config') as typeof import('./app-config');
+
+    expect(getAppConfig('development').auth.exposePrivateTokens).toBe(true);
   });
 });

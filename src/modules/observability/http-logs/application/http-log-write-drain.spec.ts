@@ -26,4 +26,28 @@ describe('HttpLogWriteDrain', () => {
 
     await expect(HttpLogWriteDrain.waitForIdle()).resolves.toBeUndefined();
   });
+
+  it('also waits for writes that are tracked while draining is in progress', async () => {
+    let resolveFirst!: () => void;
+    const firstWrite = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    let resolveSecond!: () => void;
+    const secondWrite = new Promise<void>((resolve) => {
+      resolveSecond = resolve;
+    });
+
+    HttpLogWriteDrain.track(firstWrite);
+
+    const drainPromise = HttpLogWriteDrain.waitForIdle();
+    HttpLogWriteDrain.track(secondWrite);
+
+    resolveFirst();
+    await firstWrite.finally(() => HttpLogWriteDrain.resolve(firstWrite));
+
+    resolveSecond();
+    await secondWrite.finally(() => HttpLogWriteDrain.resolve(secondWrite));
+
+    await expect(drainPromise).resolves.toBeUndefined();
+  });
 });

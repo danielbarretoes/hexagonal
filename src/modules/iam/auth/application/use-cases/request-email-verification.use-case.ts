@@ -10,7 +10,9 @@ import {
   EmailVerificationAlreadyCompletedException,
   UserNotFoundException,
 } from '../../../shared/domain/exceptions';
+import { TRANSACTIONAL_EMAIL_PORT } from '../../../../../shared/application/ports/transactional-email.token';
 import { createOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
+import type { TransactionalEmailPort } from '../../../../../shared/domain/ports/transactional-email.port';
 
 export interface RequestEmailVerificationResponse {
   verificationToken: string;
@@ -25,6 +27,8 @@ export class RequestEmailVerificationUseCase {
     private readonly userActionTokenRepository: UserActionTokenRepositoryPort,
     @Inject(PASSWORD_HASHER_PORT)
     private readonly passwordHasher: PasswordHasherPort,
+    @Inject(TRANSACTIONAL_EMAIL_PORT)
+    private readonly transactionalEmailPort: TransactionalEmailPort,
   ) {}
 
   async execute(userId: string): Promise<RequestEmailVerificationResponse> {
@@ -61,6 +65,13 @@ export class RequestEmailVerificationUseCase {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }),
     );
+    await this.transactionalEmailPort.send({
+      type: 'email_verification',
+      to: user.email,
+      recipientName: user.fullName,
+      verificationToken: opaqueToken.token,
+      expiresInHours: 24,
+    });
 
     return {
       verificationToken: opaqueToken.token,

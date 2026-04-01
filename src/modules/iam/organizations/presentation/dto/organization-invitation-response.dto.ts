@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class OrganizationInvitationResponseDto {
-  @ApiProperty()
-  invitationToken!: string;
+  @ApiProperty({
+    required: false,
+    nullable: true,
+  })
+  invitationToken?: string;
 }

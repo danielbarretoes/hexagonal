@@ -28,6 +28,7 @@
     "db:migrate:show": "node -r dotenv/config -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/config/database/data-source.ts migration:show"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1021.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",

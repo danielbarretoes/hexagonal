@@ -16,9 +16,10 @@ import { ResetPasswordUseCase } from './application/use-cases/reset-password.use
 import { RequestEmailVerificationUseCase } from './application/use-cases/request-email-verification.use-case';
 import { VerifyEmailUseCase } from './application/use-cases/verify-email.use-case';
 import { AuditLogsAccessModule } from '../../observability/audit-logs/audit-logs-access.module';
+import { EmailAccessModule } from '../../notifications/email/email-access.module';
 
 @Module({
-  imports: [UsersAccessModule, AuthSupportModule, AuditLogsAccessModule],
+  imports: [UsersAccessModule, AuthSupportModule, AuditLogsAccessModule, EmailAccessModule],
   controllers: [AuthController],
   providers: [
     LoginUseCase,

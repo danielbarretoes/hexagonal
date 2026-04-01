@@ -5,6 +5,8 @@ import { ORGANIZATION_INVITATION_REPOSITORY_TOKEN } from '../ports/organization-
 import type { OrganizationInvitationRepositoryPort } from '../../domain/ports/organization-invitation.repository.port';
 import { ROLE_REPOSITORY_TOKEN } from '../../../roles/application/ports/role-repository.token';
 import type { RoleRepositoryPort } from '../../../roles/domain/ports/role.repository.port';
+import { ORGANIZATION_REPOSITORY_TOKEN } from '../ports/organization-repository.token';
+import type { OrganizationRepositoryPort } from '../../domain/ports/organization.repository.port';
 import { PASSWORD_HASHER_PORT } from '../../../shared/application/ports/password-hasher.token';
 import type { PasswordHasherPort } from '../../../shared/domain/ports/password-hasher.port';
 import { OrganizationInvitation } from '../../domain/entities/organization-invitation.entity';
@@ -14,9 +16,12 @@ import { MEMBER_REPOSITORY_TOKEN } from '../ports/member-repository.token';
 import type { MemberRepositoryPort } from '../../domain/ports/member.repository.port';
 import { USER_REPOSITORY_TOKEN } from '../../../users/application/ports/user-repository.token';
 import type { UserRepositoryPort } from '../../../users/domain/ports/user.repository.port';
+import { TRANSACTIONAL_EMAIL_PORT } from '../../../../../shared/application/ports/transactional-email.token';
+import type { TransactionalEmailPort } from '../../../../../shared/domain/ports/transactional-email.port';
 import {
   MemberAlreadyExistsException,
   OrganizationInvitationAlreadyExistsException,
+  OrganizationNotFoundException,
   RoleNotFoundException,
 } from '../../../shared/domain/exceptions';
 
@@ -38,6 +43,8 @@ export class CreateOrganizationInvitationUseCase {
     private readonly invitationRepository: OrganizationInvitationRepositoryPort,
     @Inject(ROLE_REPOSITORY_TOKEN)
     private readonly roleRepository: RoleRepositoryPort,
+    @Inject(ORGANIZATION_REPOSITORY_TOKEN)
+    private readonly organizationRepository: OrganizationRepositoryPort,
     @Inject(PASSWORD_HASHER_PORT)
     private readonly passwordHasher: PasswordHasherPort,
     @Inject(MEMBER_REPOSITORY_TOKEN)
@@ -46,6 +53,8 @@ export class CreateOrganizationInvitationUseCase {
     private readonly userRepository: UserRepositoryPort,
     @Inject(ADMIN_AUDIT_PORT)
     private readonly adminAuditPort: AdminAuditPort,
+    @Inject(TRANSACTIONAL_EMAIL_PORT)
+    private readonly transactionalEmailPort: TransactionalEmailPort,
   ) {}
 
   async execute(
@@ -82,6 +91,11 @@ export class CreateOrganizationInvitationUseCase {
 
     const opaqueToken = createOpaqueToken();
     const tokenHash = await this.passwordHasher.hash(opaqueToken.secret);
+    const organization = await this.organizationRepository.findById(command.organizationId);
+
+    if (!organization) {
+      throw new OrganizationNotFoundException(command.organizationId);
+    }
 
     const invitation = OrganizationInvitation.create({
       id: opaqueToken.id,
@@ -103,6 +117,14 @@ export class CreateOrganizationInvitationUseCase {
         email: command.email,
         roleCode,
       },
+    });
+    await this.transactionalEmailPort.send({
+      type: 'organization_invitation',
+      to: command.email,
+      organizationName: organization.name,
+      roleCode,
+      invitationToken: opaqueToken.token,
+      expiresInDays: 7,
     });
 
     return {

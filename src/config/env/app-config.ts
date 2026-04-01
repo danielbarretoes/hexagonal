@@ -36,9 +36,23 @@ export interface AppConfig {
     rateLimitLimit: number;
   };
   logging: {
+    serviceName: string;
     level: LogLevel;
     json: boolean;
     enabledLevels: LogLevel[];
+  };
+  email: {
+    enabled: boolean;
+    provider: 'ses';
+    sesRegion: string;
+    fromEmail: string;
+    fromName: string;
+    brandName: string;
+    appPublicUrl: string;
+    passwordResetPath: string;
+    emailVerificationPath: string;
+    invitationPath: string;
+    welcomePath: string;
   };
   http: {
     helmetEnabled: boolean;
@@ -156,12 +170,17 @@ function assertEnvironmentInvariants(config: AppConfig): void {
   if (config.nodeEnv === 'production' && config.auth.exposePrivateTokens) {
     throw new Error('AUTH_EXPOSE_PRIVATE_TOKENS must be false in production');
   }
+
+  if (config.email.enabled) {
+    assertValidUrl('APP_PUBLIC_URL', config.email.appPublicUrl);
+  }
 }
 
 export function getAppConfig(explicitEnvironment?: RuntimeEnvironment): AppConfig {
   const nodeEnv = loadEnvironment(explicitEnvironment);
   const apiBaseUrl = getRequiredString('API_BASE_URL', 'https://api.hexagonal.com');
   const logLevel = getLogLevel('LOG_LEVEL', nodeEnv === 'production' ? 'log' : 'debug');
+  const emailEnabled = getBoolean('EMAIL_ENABLED', false);
   const configuredJwtSecret = process.env.JWT_SECRET?.trim();
   const jwtSecret =
     configuredJwtSecret && configuredJwtSecret.length > 0
@@ -198,15 +217,32 @@ export function getAppConfig(explicitEnvironment?: RuntimeEnvironment): AppConfi
       jwtSecret,
       jwtExpiresIn: getRequiredString('JWT_EXPIRES_IN', '15m') as StringValue,
       refreshTokenTtlMs: getPositiveInteger('AUTH_REFRESH_TOKEN_TTL_MS', 30 * 24 * 60 * 60 * 1000),
-      exposePrivateTokens: getBoolean('AUTH_EXPOSE_PRIVATE_TOKENS', nodeEnv === 'test'),
+      exposePrivateTokens: getBoolean(
+        'AUTH_EXPOSE_PRIVATE_TOKENS',
+        nodeEnv === 'test' || (nodeEnv !== 'production' && !emailEnabled),
+      ),
       rateLimitingEnabled: getBoolean('AUTH_RATE_LIMIT_ENABLED', true),
       rateLimitTtlMs: getPositiveInteger('AUTH_RATE_LIMIT_TTL_MS', 60000),
       rateLimitLimit: getPositiveInteger('AUTH_RATE_LIMIT_LIMIT', 10),
     },
     logging: {
+      serviceName: getRequiredString('LOG_SERVICE_NAME', 'hexagonal-api'),
       level: logLevel,
       json: getBoolean('LOG_JSON', nodeEnv === 'production'),
       enabledLevels: getEnabledLogLevels(logLevel),
+    },
+    email: {
+      enabled: emailEnabled,
+      provider: 'ses',
+      sesRegion: getRequiredString('EMAIL_SES_REGION', 'us-east-1'),
+      fromEmail: getRequiredString('EMAIL_FROM_EMAIL', 'noreply@example.com'),
+      fromName: getRequiredString('EMAIL_FROM_NAME', 'Hexagonal API'),
+      brandName: getRequiredString('EMAIL_BRAND_NAME', 'Hexagonal API'),
+      appPublicUrl: getRequiredString('APP_PUBLIC_URL', 'http://localhost:3000'),
+      passwordResetPath: getRequiredString('EMAIL_PASSWORD_RESET_PATH', '/reset-password'),
+      emailVerificationPath: getRequiredString('EMAIL_VERIFICATION_PATH', '/verify-email'),
+      invitationPath: getRequiredString('EMAIL_INVITATION_PATH', '/accept-invitation'),
+      welcomePath: getRequiredString('EMAIL_WELCOME_PATH', '/login'),
     },
     http: {
       helmetEnabled: getBoolean('HELMET_ENABLED', true),

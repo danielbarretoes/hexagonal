@@ -10,6 +10,8 @@ export class HttpLogWriteDrain {
   }
 
   static async waitForIdle(): Promise<void> {
-    await Promise.all([...this.pendingWrites]);
+    while (this.pendingWrites.size > 0) {
+      await Promise.all([...this.pendingWrites]);
+    }
   }
 }

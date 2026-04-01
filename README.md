@@ -17,6 +17,8 @@ It currently includes:
 - PostgreSQL RLS foundation for tenant-scoped `members`
 - AsyncLocalStorage tenant context for request-scoped tenant propagation
 - validated runtime configuration, health probes, graceful shutdown, and production HTTP hardening
+- transactional email through a shared port with Amazon SES and a no-op local/test fallback
+- structured JSON stdout logging with `traceId` correlation ready for ELK shippers
 
 ## Project Map
 
@@ -46,6 +48,9 @@ src/
 │   │   ├── users/
 │   │   │   └── users-access.module.ts
 │   │   └── shared/                 # shared kernel inside IAM
+│   ├── notifications/
+│   │   └── email/
+│   │       └── email-access.module.ts
 │   └── observability/
 │       └── http-logs/
 └── shared/                         # global shared kernel
@@ -186,7 +191,8 @@ Why:
 - `POST /auth/logout` and `POST /auth/logout-all` for refresh-session revocation
 - password reset one-time tokens backed by `user_action_tokens`
 - email verification one-time tokens backed by `user_action_tokens`
-- reset and verification tokens only exposed in test mode
+- reset and verification emails are dispatched through a transactional email port
+- private reset and verification tokens are only exposed when `AUTH_EXPOSE_PRIVATE_TOKENS=true`
 - rate limiting on auth endpoints
 - bcrypt password hashing
 - JWT guard
@@ -205,6 +211,7 @@ Why:
 - tenant-scoped `POST /organization-invitations` to invite an email into the current organization
 - authenticated `POST /organization-invitations/accept` to accept an invite after self-registration/login
 - invitations carry the target organization and role to assign on acceptance
+- invitation delivery goes through the same transactional email port and uses the configured public app URL
 - PostgreSQL RLS on tenant-managed invitation access plus invitation-id scoped acceptance lookup
 
 ### Roles
@@ -227,13 +234,23 @@ Why:
 - records membership changes, invitation lifecycle, and session revocation events
 - complements `http_logs` instead of mixing business auditability with request observability
 
+### Transactional Email
+
+- `src/shared/domain/ports/transactional-email.port.ts` defines the outbound email contract known by the core
+- `src/modules/notifications/email` provides the technical adapter layer and Nest wiring for email delivery
+- Amazon SES is the production adapter and a no-op adapter keeps local/test environments stable when `EMAIL_ENABLED=false`
+- current templates cover password reset, email verification, organization invitation, and self-register welcome
+- public URLs are composed from `APP_PUBLIC_URL` plus the configured path variables instead of being hard-coded inside use cases
+
 ## Runtime Baseline
 
 - runtime configuration is validated through `src/config/env/app-config.ts`
 - startup fails fast on invalid combinations such as `DB_SYNC=true` in production, `DB_POOL_MIN > DB_POOL_MAX`, or short JWT secrets
-- `LOG_LEVEL` and `LOG_JSON` drive the Nest logger baseline
+- `LOG_LEVEL`, `LOG_JSON`, and `LOG_SERVICE_NAME` define the external logging baseline
+- `EMAIL_ENABLED`, `EMAIL_SES_REGION`, `EMAIL_FROM_*`, `EMAIL_BRAND_NAME`, `APP_PUBLIC_URL`, and the email path variables define the outbound email contract
 - `HELMET_ENABLED`, `CORS_ENABLED`, `CORS_ORIGINS`, and `HTTP_BODY_LIMIT` define the HTTP hardening contract
 - `DB_SSL_ENABLED` and `DB_SSL_REJECT_UNAUTHORIZED` control explicit PostgreSQL TLS behavior instead of hard-coded defaults
+- successful and failed HTTP requests emit structured JSON lines to stdout/stderr with `traceId`, `userId`, and `organizationId` when available
 
 ## Health And Shutdown
 
@@ -242,6 +259,7 @@ Why:
 - probes are version-neutral so deployment tooling does not need API version churn
 - readiness performs a minimal `SELECT 1` against PostgreSQL
 - bootstrap enables shutdown hooks and drains pending `http_logs` writes before process exit
+- `src/health` intentionally lives at the root because probes are deployment adapters, not business modules
 
 ## Database Workflow
 
@@ -310,7 +328,7 @@ Or run the full local contract in one command:
 
 - `npm run test:all`
 
-`npm test -- --runInBand` enforces the repository coverage threshold, and the GitHub Actions workflow publishes the same contract plus a coverage summary directly in the job summary for pushes and pull requests.
+`npm test -- --runInBand` enforces the repository coverage threshold, and now includes focused specs for transactional email templates, the SES adapter boundary, IAM use cases that trigger outbound mail, and the HTTP logging JSON contract. GitHub Actions publishes the same contract plus a coverage summary directly in the job summary for pushes and pull requests.
 
 ## Operational Retention
 
@@ -318,6 +336,31 @@ Or run the full local contract in one command:
 - `audit_logs` are administrative evidence and should be retained longer; recommended baseline: 365 days
 - the template does not auto-delete either table at runtime
 - production deployments should archive or purge them with an explicit scheduled job owned by operations, not by request-path code
+
+## Production Readiness Verdict
+
+Current state:
+
+- strong candidate as a hexagonal SaaS API template for teams that want tenant-aware IAM, RBAC, PostgreSQL RLS, and enforceable architectural boundaries from day one
+- much closer to production than a teaching-only sample because it now includes CI, runtime config validation, SES-ready email delivery, ELK-ready stdout JSON logging, health probes, graceful shutdown, coverage gates, and operational retention guidance
+- suitable as a base template for internal platforms or early-stage SaaS backends that will keep evolving with project-specific adapters
+
+What is already strong:
+
+- strict `domain -> application -> infrastructure/presentation` direction with architecture tests
+- tenant-scoped request validation plus PostgreSQL RLS on the critical current tables
+- usable auth lifecycle with short-lived JWTs, opaque refresh sessions, logout/logout-all, reset, verification, and rate limiting
+- separation between request observability (`http_logs`) and administrative auditability (`audit_logs`)
+- decoupled outbound email through a shared port plus a concrete SES adapter
+- ELK-friendly structured request logging without coupling the core to Logstash or vendor SDKs
+- reproducible local and CI quality gates with PostgreSQL-backed e2e coverage
+
+What is still intentionally left to downstream products:
+
+- asynchronous delivery guarantees such as outbox/retry workers or dead-letter handling for email
+- broader observability stacks such as OpenTelemetry, metrics exporters, or vendor-specific tracing
+- stronger per-project retention/compliance automation beyond the documented baseline
+- SaaS-specific modules such as billing, API keys, feature flags, and background jobs
 
 ## Adding A New Feature
 
@@ -405,9 +448,9 @@ And this is not correct inside domain/application:
 If you want to push this template further:
 
 - add richer value objects such as `Email` and `OrganizationName`
-- add refresh tokens / sessions
 - add more tenant-scoped tables with RLS
 - harden authorization policies per feature as more bounded contexts appear
+- add outbox/retry workers, richer email branding, and stronger external observability beyond the stdout JSON baseline
 
 Not part of the base template by default:
 

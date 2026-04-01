@@ -27,6 +27,7 @@ import { RemoveMemberUseCase } from './application/use-cases/remove-member.use-c
 import { CreateOrganizationInvitationUseCase } from './application/use-cases/create-organization-invitation.use-case';
 import { AcceptOrganizationInvitationUseCase } from './application/use-cases/accept-organization-invitation.use-case';
 import { AuditLogsAccessModule } from '../../observability/audit-logs/audit-logs-access.module';
+import { EmailAccessModule } from '../../notifications/email/email-access.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuditLogsAccessModule } from '../../observability/audit-logs/audit-logs
     RolesAccessModule,
     UsersAccessModule,
     AuditLogsAccessModule,
+    EmailAccessModule,
   ],
   controllers: [OrganizationsController, MembersController, OrganizationInvitationsController],
   providers: [

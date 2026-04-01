@@ -7,7 +7,9 @@ import { PASSWORD_HASHER_PORT } from '../../../shared/application/ports/password
 import type { PasswordHasherPort } from '../../../shared/domain/ports/password-hasher.port';
 import { UserActionToken } from '../../domain/entities/user-action-token.entity';
 import { ActionTokenNotFoundException } from '../../../shared/domain/exceptions';
+import { TRANSACTIONAL_EMAIL_PORT } from '../../../../../shared/application/ports/transactional-email.token';
 import { createOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
+import type { TransactionalEmailPort } from '../../../../../shared/domain/ports/transactional-email.port';
 
 export interface RequestPasswordResetResponse {
   resetToken: string;
@@ -22,6 +24,8 @@ export class RequestPasswordResetUseCase {
     private readonly userActionTokenRepository: UserActionTokenRepositoryPort,
     @Inject(PASSWORD_HASHER_PORT)
     private readonly passwordHasher: PasswordHasherPort,
+    @Inject(TRANSACTIONAL_EMAIL_PORT)
+    private readonly transactionalEmailPort: TransactionalEmailPort,
   ) {}
 
   async execute(email: string): Promise<RequestPasswordResetResponse> {
@@ -54,6 +58,13 @@ export class RequestPasswordResetUseCase {
         expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       }),
     );
+    await this.transactionalEmailPort.send({
+      type: 'password_reset',
+      to: user.email,
+      recipientName: user.fullName,
+      resetToken: opaqueToken.token,
+      expiresInMinutes: 15,
+    });
 
     return {
       resetToken: opaqueToken.token,

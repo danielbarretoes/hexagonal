@@ -96,10 +96,11 @@ This ensures the core remains pure and testable without any external dependencie
 
 ## 2. Bounded Contexts & Features
 
-This project uses two bounded contexts:
+This project uses three bounded contexts/modules with clear responsibilities:
 
 - **`iam`** — Identity & Access Management
 - **`observability`** — HTTP logging and monitoring
+- **`notifications`** — technical outbound delivery adapters such as transactional email
 
 ### IAM Features
 
@@ -112,10 +113,14 @@ This project uses two bounded contexts:
 
 - `http-logs` — HTTP request/response logging
 
+### Notifications Features
+
+- `email` — outbound transactional email wiring and provider adapters
+
 ### Shared Kernels
 
 - `src/modules/iam/shared` — Contracts shared within IAM (e.g., password hashing, IAM exceptions)
-- `src/shared` — Cross-context primitives (e.g., generic pagination, base exceptions, authorization contracts)
+- `src/shared` — Cross-context primitives (e.g., generic pagination, base exceptions, authorization contracts, outbound email ports)
 
 > **Rule:** Shared kernels exist only for concepts genuinely reused by multiple features. Do not create fake shared folders.
 
@@ -144,11 +149,25 @@ Examples:
 
 This keeps environment parsing, fail-fast checks, and transport/runtime defaults out of feature code.
 
+### `src/health`
+
+Deployment probes belong at the root when they are generic operational adapters rather than business capabilities.
+
+Examples:
+
+- `health.controller.ts`
+- `health.service.ts`
+- `health.module.ts`
+
+Keep `health` outside bounded contexts unless the project grows a broader platform/operations module with additional runtime capabilities.
+
 ### `src/shared`
 
 Global shared kernel across bounded contexts.
 
 Examples: generic pagination primitive, base domain exception class, generic HTTP contracts, permission codes, authorization ports
+
+The transactional email port also lives here because IAM use cases depend on the capability, while SES remains an outer adapter.
 
 ### `src/modules/iam/shared`
 
@@ -169,6 +188,8 @@ Examples:
 Use this when another module only needs a token/provider, not the feature's controllers or use cases.
 
 Do not use an access module as an excuse to let sibling features grow a wide web of direct imports. Access modules solve Nest wiring; once a workflow starts coordinating multiple sibling features, introduce a bounded-context application facade/orchestration service instead.
+
+The `notifications/email/email-access.module.ts` is a good example: IAM features import the provider wiring without importing SES details or template code directly.
 
 ---
 
@@ -684,6 +705,30 @@ Repository filtering uses the **validated effective tenant** from request contex
 - `GET /api/health/ready` is version-neutral and performs a minimal PostgreSQL readiness check
 - probes are deployment/runtime adapters, so they belong outside business feature bounded contexts
 
+### Outbound Email And External Logging
+
+- `src/shared/domain/ports/transactional-email.port.ts` defines the capability the core depends on
+- `src/modules/notifications/email` implements that capability with Amazon SES and a no-op fallback for local/test mode
+- use cases emit semantic email messages (`password_reset`, `email_verification`, `organization_invitation`, `welcome`) instead of constructing SES payloads directly
+- public app links are composed in the adapter/template layer from validated config (`APP_PUBLIC_URL` plus email path variables)
+- HTTP runtime logs emit structured JSON to stdout/stderr with stable operational fields such as `event`, `traceId`, `statusCode`, `userId`, and `organizationId`
+
+### Template Verdict
+
+At its current state, this repository is no longer only a didactic hexagonal sample.
+
+It is a credible production-oriented starter because it combines:
+
+- architecture guardrails
+- tenant-aware authorization and RLS
+- runtime config validation
+- decoupled outbound email via SES-ready adapters
+- ELK-ready structured stdout logging
+- graceful shutdown and probes
+- CI-enforced quality gates
+
+Residual gaps are mostly product/platform-specific integrations rather than structural architectural debt.
+
 ---
 
 ## 11. Soft Delete Pattern
@@ -895,6 +940,7 @@ npm run test:all
 Notes:
 
 - `npm test -- --runInBand` enforces the current coverage threshold after excluding wiring-only files, DTOs, migration files, and ORM entities from the numerator
+- unit coverage now includes IAM use cases that trigger outbound email plus the template/adapter boundary for SES
 - GitHub Actions publishes a coverage summary directly in the job summary, not only as an artifact
 - if schema behavior matters, also verify migrations and RLS behavior through the PostgreSQL-backed e2e suite
 

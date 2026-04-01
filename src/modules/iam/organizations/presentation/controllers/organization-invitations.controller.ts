@@ -18,6 +18,7 @@ import { OrganizationInvitationResponseDto } from '../dto/organization-invitatio
 import { AcceptOrganizationInvitationDto } from '../dto/accept-organization-invitation.dto';
 import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
+import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
 
 @ApiTags('Organization Invitations')
 @Controller({ path: 'organization-invitations', version: '1' })
@@ -38,12 +39,14 @@ export class OrganizationInvitationsController {
     @CurrentUser() user: AuthenticatedUserPayload,
     @Body() body: CreateOrganizationInvitationDto,
   ) {
-    return this.createOrganizationInvitationUseCase.execute({
+    const response = await this.createOrganizationInvitationUseCase.execute({
       actorUserId: user.userId,
       organizationId,
       email: body.email,
       roleCode: body.roleCode,
     });
+
+    return getAuthRuntimeConfig().exposePrivateTokens ? response : {};
   }
 
   @Post('accept')

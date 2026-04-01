@@ -1,6 +1,7 @@
-import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Response } from 'express';
 import type { HttpLogRequest } from '../../../../../common/http/http-log-context';
+import { writeStructuredLog } from '../../../../../common/observability/logging/structured-log.util';
 import { HttpLogWriteDrain } from '../../application/http-log-write-drain';
 import { RecordHttpLogUseCase } from '../../application/use-cases/record-http-log.use-case';
 import {
@@ -13,8 +14,6 @@ type SendResponder = (body?: unknown) => Response;
 
 @Injectable()
 export class HttpLogsMiddleware implements NestMiddleware {
-  private readonly logger = new Logger(HttpLogsMiddleware.name);
-
   constructor(private readonly recordHttpLogUseCase: RecordHttpLogUseCase) {}
 
   use(request: HttpLogRequest, response: Response, next: NextFunction): void {
@@ -51,7 +50,11 @@ export class HttpLogsMiddleware implements NestMiddleware {
         .execute(logCommand)
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Unknown persistence error';
-          this.logger.error(`Failed to persist HTTP log: ${message}`);
+          writeStructuredLog('error', HttpLogsMiddleware.name, 'Failed to persist HTTP log', {
+            event: 'http_log.persist.failed',
+            errorMessage: message,
+            traceId,
+          });
         })
         .finally(() => {
           HttpLogWriteDrain.resolve(pendingWrite);
@@ -60,15 +63,30 @@ export class HttpLogsMiddleware implements NestMiddleware {
       HttpLogWriteDrain.track(pendingWrite);
 
       if (statusCode >= 400) {
-        this.logger.error(
-          `${request.method} ${request.originalUrl} ${statusCode} - ${durationMs}ms${
-            logCommand.errorMessage ? `: ${logCommand.errorMessage}` : ''
-          }`,
-        );
+        writeStructuredLog('error', HttpLogsMiddleware.name, 'HTTP request completed with error', {
+          event: 'http.request.completed',
+          traceId,
+          method: request.method,
+          path: request.path,
+          statusCode,
+          durationMs,
+          userId: request.user?.userId ?? null,
+          organizationId: request.effectiveOrganizationId ?? null,
+          errorMessage: logCommand.errorMessage,
+        });
         return;
       }
 
-      this.logger.log(`${request.method} ${request.originalUrl} ${statusCode} - ${durationMs}ms`);
+      writeStructuredLog('log', HttpLogsMiddleware.name, 'HTTP request completed', {
+        event: 'http.request.completed',
+        traceId,
+        method: request.method,
+        path: request.path,
+        statusCode,
+        durationMs,
+        userId: request.user?.userId ?? null,
+        organizationId: request.effectiveOrganizationId ?? null,
+      });
     });
 
     next();

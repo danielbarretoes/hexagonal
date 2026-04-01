@@ -1,8 +1,12 @@
 import { EventEmitter } from 'node:events';
-import { Logger } from '@nestjs/common';
 import type { NextFunction, Response } from 'express';
 import type { HttpLogRequest } from '../../../../../common/http/http-log-context';
+import { writeStructuredLog } from '../../../../../common/observability/logging/structured-log.util';
 import { HttpLogsMiddleware } from './http-logs.middleware';
+
+jest.mock('../../../../../common/observability/logging/structured-log.util', () => ({
+  writeStructuredLog: jest.fn(),
+}));
 
 type MockResponse = Response &
   EventEmitter & {
@@ -53,7 +57,6 @@ describe('HttpLogsMiddleware', () => {
       effectiveOrganizationId: 'org-1',
     } as HttpLogRequest;
     execute.mockResolvedValue(undefined);
-    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
 
     middleware.use(request, response, next);
     response.json({ ok: true });
@@ -76,7 +79,61 @@ describe('HttpLogsMiddleware', () => {
         traceId: 'trace-1',
       }),
     );
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('POST /api/v1/auth/login 200'));
+    expect(writeStructuredLog).toHaveBeenCalledWith(
+      'log',
+      'HttpLogsMiddleware',
+      'HTTP request completed',
+      expect.objectContaining({
+        event: 'http.request.completed',
+        traceId: 'trace-1',
+        method: 'POST',
+        path: '/api/v1/auth/login',
+      }),
+    );
+  });
+
+  it('uses the normalized request path instead of leaking query string values to external logs', async () => {
+    const middleware = new HttpLogsMiddleware({
+      execute,
+    } as never);
+    const response = createResponse(200);
+    const request = {
+      method: 'GET',
+      path: '/api/v1/auth/password-reset/confirm',
+      originalUrl: '/api/v1/auth/password-reset/confirm?token=secret-token',
+      headers: {
+        'x-trace-id': 'trace-2',
+      },
+      body: null,
+      query: {
+        token: 'secret-token',
+      },
+      params: {},
+    } as HttpLogRequest;
+    execute.mockResolvedValue(undefined);
+
+    middleware.use(request, response, next);
+    response.send({ ok: true });
+    response.emit('finish');
+    await HttpLogsMiddleware.waitForIdle();
+
+    expect(writeStructuredLog).toHaveBeenCalledWith(
+      'log',
+      'HttpLogsMiddleware',
+      'HTTP request completed',
+      expect.objectContaining({
+        event: 'http.request.completed',
+        path: '/api/v1/auth/password-reset/confirm',
+      }),
+    );
+    expect(writeStructuredLog).not.toHaveBeenCalledWith(
+      'log',
+      'HttpLogsMiddleware',
+      'HTTP request completed',
+      expect.objectContaining({
+        path: expect.stringContaining('secret-token'),
+      }),
+    );
   });
 
   it('logs failed responses and swallows persistence failures', async () => {
@@ -100,14 +157,29 @@ describe('HttpLogsMiddleware', () => {
       },
     } as HttpLogRequest;
     execute.mockRejectedValue(new Error('write failed'));
-    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
     middleware.use(request, response, next);
     response.send({ status: 'failed' });
     response.emit('finish');
     await HttpLogsMiddleware.waitForIdle();
 
-    expect(errorSpy).toHaveBeenCalledWith('Failed to persist HTTP log: write failed');
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('GET /api/v1/users/1 500'));
+    expect(writeStructuredLog).toHaveBeenCalledWith(
+      'error',
+      'HttpLogsMiddleware',
+      'Failed to persist HTTP log',
+      expect.objectContaining({
+        event: 'http_log.persist.failed',
+        errorMessage: 'write failed',
+      }),
+    );
+    expect(writeStructuredLog).toHaveBeenCalledWith(
+      'error',
+      'HttpLogsMiddleware',
+      'HTTP request completed with error',
+      expect.objectContaining({
+        event: 'http.request.completed',
+        path: '/api/v1/users/1',
+      }),
+    );
   });
 });

@@ -18,9 +18,16 @@ import { IamAuthorizationAccessModule } from '../iam-authorization-access.module
 import { RolesAccessModule } from '../roles/roles-access.module';
 import { TenantUserManagementPolicy } from './application/policies/tenant-user-management.policy';
 import { PermissionGuard } from '../../../common/http/guards/permission.guard';
+import { EmailAccessModule } from '../../notifications/email/email-access.module';
 
 @Module({
-  imports: [UsersAccessModule, AuthSupportModule, IamAuthorizationAccessModule, RolesAccessModule],
+  imports: [
+    UsersAccessModule,
+    AuthSupportModule,
+    IamAuthorizationAccessModule,
+    RolesAccessModule,
+    EmailAccessModule,
+  ],
   controllers: [UsersController],
   providers: [
     RegisterUserUseCase,

@@ -6,6 +6,7 @@
 import { ConsoleLogger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { writeStructuredLog } from './common/observability/logging/structured-log.util';
 import { AppModule } from './app.module';
 import { configureHttpApplication } from './app.setup';
 import { getAppConfig } from './config/env/app-config';
@@ -26,13 +27,18 @@ async function bootstrap(): Promise<void> {
   configureHttpApplication(app);
 
   await app.listen(config.port);
-  logger.log(`Application is running on: http://localhost:${config.port}`);
-  logger.log(
-    `Environment: ${config.nodeEnv}, database: ${config.database.database}, logLevel: ${config.logging.level}`,
-  );
+  writeStructuredLog('log', 'Bootstrap', 'Application started', {
+    event: 'application.started',
+    port: config.port,
+    database: config.database.database,
+    logLevel: config.logging.level,
+  });
 
   if (isSwaggerEnabled()) {
-    logger.log(`Swagger UI is running on: http://localhost:${config.port}/docs`);
+    writeStructuredLog('log', 'Bootstrap', 'Swagger enabled', {
+      event: 'application.swagger.enabled',
+      docsUrl: `http://localhost:${config.port}/docs`,
+    });
   }
 }
 
