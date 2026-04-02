@@ -88,7 +88,14 @@ export class CreateOrganizationInvitationUseCase {
       this.prepareInvitation(command),
     );
 
-    await this.transactionalEmailPort.send(preparedInvitation.emailMessage);
+    try {
+      await this.transactionalEmailPort.send(preparedInvitation.emailMessage);
+    } catch (error) {
+      await this.transactionRunner.runInTransaction(() =>
+        this.invitationRepository.update(preparedInvitation.invitation.expire()),
+      );
+      throw error;
+    }
 
     return {
       invitationToken: preparedInvitation.invitationToken,
@@ -96,6 +103,7 @@ export class CreateOrganizationInvitationUseCase {
   }
 
   private async prepareInvitation(command: CreateOrganizationInvitationCommand): Promise<{
+    invitation: OrganizationInvitation;
     invitationToken: string;
     emailMessage: {
       type: 'organization_invitation';
@@ -176,6 +184,7 @@ export class CreateOrganizationInvitationUseCase {
     });
 
     return {
+      invitation,
       invitationToken: opaqueToken.token,
       emailMessage: {
         type: 'organization_invitation',

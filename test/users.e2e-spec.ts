@@ -8,6 +8,7 @@ import {
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
 import {
+  createIdempotencyKey,
   createOrganization,
   createTenantUser,
   loginUser,
@@ -128,5 +129,66 @@ describe('Users API (e2e, PostgreSQL)', () => {
     expect(restoreResponse.body.id).toBe(managedUserId);
 
     await loginUser(context.app.getHttpServer(), 'jane@example.com').expect(200);
+  });
+
+  it('blocks tenant-scoped profile mutations for users shared across organizations', async () => {
+    await selfRegisterUser(context.app.getHttpServer(), {
+      email: 'owner@example.com',
+      firstName: 'Owner',
+      lastName: 'User',
+    }).expect(201);
+
+    const loginResponse = await loginUser(context.app.getHttpServer(), 'owner@example.com').expect(
+      200,
+    );
+    const accessToken = loginResponse.body.accessToken as string;
+
+    const firstOrganizationResponse = await createOrganization(
+      context.app.getHttpServer(),
+      accessToken,
+      'Acme',
+    ).expect(201);
+    const secondOrganizationResponse = await createOrganization(
+      context.app.getHttpServer(),
+      accessToken,
+      'Beta',
+    ).expect(201);
+
+    const managedUserResponse = await createTenantUser(
+      context.app.getHttpServer(),
+      accessToken,
+      firstOrganizationResponse.body.id as string,
+      {
+        email: 'shared@example.com',
+        firstName: 'Shared',
+        lastName: 'User',
+      },
+    ).expect(201);
+
+    await request(context.app.getHttpServer())
+      .post('/api/v1/members')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('x-organization-id', secondOrganizationResponse.body.id as string)
+      .set('Idempotency-Key', createIdempotencyKey('shared-user-member-add'))
+      .send({
+        userId: managedUserResponse.body.id,
+      })
+      .expect(201);
+
+    await request(context.app.getHttpServer())
+      .patch(`/api/v1/users/${managedUserResponse.body.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('x-organization-id', firstOrganizationResponse.body.id as string)
+      .send({
+        firstName: 'Changed',
+        lastName: 'Everywhere',
+      })
+      .expect(403);
+
+    await request(context.app.getHttpServer())
+      .delete(`/api/v1/users/${managedUserResponse.body.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('x-organization-id', firstOrganizationResponse.body.id as string)
+      .expect(403);
   });
 });

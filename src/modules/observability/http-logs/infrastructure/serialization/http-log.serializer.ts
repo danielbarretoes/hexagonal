@@ -5,7 +5,9 @@ const TRUNCATED_SUFFIX = '...[TRUNCATED]';
 const MAX_STRING_LENGTH = 4000;
 const MAX_OBJECT_DEPTH = 6;
 const SENSITIVE_KEYS = new Set([
+  'apikey',
   'authorization',
+  'clientsecret',
   'cookie',
   'cookies',
   'password',
@@ -16,6 +18,10 @@ const SENSITIVE_KEYS = new Set([
   'set-cookie',
   'token',
   'accesstoken',
+  'invitationtoken',
+  'privatekey',
+  'resettoken',
+  'verificationtoken',
 ]);
 
 function truncateString(value: string): string {

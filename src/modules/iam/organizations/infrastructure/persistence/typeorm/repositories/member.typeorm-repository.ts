@@ -48,9 +48,12 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     organizationIdOverride?: string,
     options?: {
       allowWithoutTenant?: boolean;
+      ignoreTenantContext?: boolean;
     },
   ): Promise<T> {
-    const organizationId = organizationIdOverride || TenantContext.getOrganizationId();
+    const organizationId = options?.ignoreTenantContext
+      ? organizationIdOverride
+      : organizationIdOverride || TenantContext.getOrganizationId();
 
     if (!organizationId) {
       if (!options?.allowWithoutTenant) {
@@ -107,7 +110,7 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     const entities = await this.runWithinTenantScope(
       (repository) =>
         repository.find({
-          where: this.withTenantScope({ userId }),
+          where: { userId },
           order: { joinedAt: 'DESC' },
           relations: {
             user: true,
@@ -118,7 +121,7 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
           },
         }),
       undefined,
-      { allowWithoutTenant: true },
+      { allowWithoutTenant: true, ignoreTenantContext: true },
     );
     return entities.map(MemberMapper.toDomain);
   }

@@ -6,7 +6,6 @@ import type { UserActionTokenRepositoryPort } from '../../domain/ports/user-acti
 import { PASSWORD_HASHER_PORT } from '../../../shared/application/ports/password-hasher.token';
 import type { PasswordHasherPort } from '../../../shared/domain/ports/password-hasher.port';
 import { UserActionToken } from '../../domain/entities/user-action-token.entity';
-import { ActionTokenNotFoundException } from '../../../shared/domain/exceptions';
 import { TRANSACTIONAL_EMAIL_PORT } from '../../../../../shared/application/ports/transactional-email.token';
 import { TRANSACTION_RUNNER_PORT } from '../../../../../shared/application/ports/transaction-runner.token';
 import { createOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
@@ -35,10 +34,14 @@ export class RequestPasswordResetUseCase {
     private readonly emailDeliveryMode: 'sync' | 'async',
   ) {}
 
-  async execute(email: string): Promise<RequestPasswordResetResponse> {
+  async execute(email: string): Promise<RequestPasswordResetResponse | null> {
     if (this.emailDeliveryMode === 'async') {
       return this.transactionRunner.runInTransaction(async () => {
         const preparedReset = await this.preparePasswordReset(email);
+
+        if (!preparedReset) {
+          return null;
+        }
 
         await this.transactionalEmailPort.send(
           this.toPasswordResetMessage(preparedReset, preparedReset.resetToken),
@@ -54,6 +57,10 @@ export class RequestPasswordResetUseCase {
       this.preparePasswordReset(email),
     );
 
+    if (!preparedReset) {
+      return null;
+    }
+
     await this.transactionalEmailPort.send(
       this.toPasswordResetMessage(preparedReset, preparedReset.resetToken),
     );
@@ -67,13 +74,13 @@ export class RequestPasswordResetUseCase {
     userEmail: string;
     recipientName: string;
     resetToken: string;
-  }> {
+  } | null> {
     const user = await this.userRepository.findByEmail(email, {
       includeDeleted: true,
     });
 
     if (!user || user.isDeleted) {
-      throw new ActionTokenNotFoundException('password reset');
+      return null;
     }
 
     const existingToken = await this.userActionTokenRepository.findActiveByUserIdAndPurpose(

@@ -7,7 +7,7 @@ import {
   waitForHttpLog,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { loginUser, selfRegisterUser } from './support/iam-fixtures';
+import { createIdempotencyKey, loginUser, selfRegisterUser } from './support/iam-fixtures';
 
 describe('Auth API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -72,6 +72,7 @@ describe('Auth API (e2e, PostgreSQL)', () => {
   it('returns RFC 7807 problem details for invalid payloads and unauthorized access', async () => {
     const invalidRegistrationResponse = await request(context.app.getHttpServer())
       .post('/api/v1/users/self-register')
+      .set('Idempotency-Key', createIdempotencyKey('invalid-register'))
       .send({
         email: 'invalid-email',
         password: '123',
@@ -114,5 +115,19 @@ describe('Auth API (e2e, PostgreSQL)', () => {
       page: '1',
       limit: '10',
     });
+  });
+
+  it('requires an idempotency key for idempotent registration routes', async () => {
+    const response = await request(context.app.getHttpServer())
+      .post('/api/v1/users/self-register')
+      .send({
+        email: 'john@example.com',
+        password: 'Password123',
+        firstName: 'John',
+        lastName: 'Doe',
+      })
+      .expect(400);
+
+    expect(response.body.detail).toBe('Idempotency-Key header is required for this endpoint');
   });
 });

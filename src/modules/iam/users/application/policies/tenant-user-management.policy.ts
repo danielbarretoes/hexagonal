@@ -3,6 +3,7 @@ import type { MemberRepositoryPort } from '../../../organizations/domain/ports/m
 import { MEMBER_REPOSITORY_TOKEN } from '../../../organizations/application/ports/member-repository.token';
 import {
   CannotManageOwnUserException,
+  SharedUserIdentityManagementNotAllowedException,
   UserManagementTargetNotAllowedException,
 } from '../../../shared/domain/exceptions';
 
@@ -29,6 +30,15 @@ export class TenantUserManagementPolicy {
 
     if (!targetMembership) {
       throw new UserManagementTargetNotAllowedException(targetUserId, organizationId);
+    }
+
+    const targetMemberships = await this.memberRepository.findByUser(targetUserId);
+    const belongsToAnotherOrganization = targetMemberships.some(
+      (membership) => membership.organizationId !== organizationId,
+    );
+
+    if (belongsToAnotherOrganization) {
+      throw new SharedUserIdentityManagementNotAllowedException(targetUserId);
     }
   }
 }

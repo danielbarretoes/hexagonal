@@ -192,6 +192,7 @@ Why:
 - tenant-scoped `POST /users` to create another user inside the current organization
 - tenant-scoped `GET /users` and `GET /users/:id`
 - tenant-scoped `PATCH /users/:id`, `DELETE /users/:id`, and `PATCH /users/:id/restore`
+- tenant-scoped update/delete/restore only apply to user identities that are exclusive to the current organization; shared identities fail closed with `403`
 
 ### Organizations
 
@@ -210,6 +211,7 @@ Why:
 - email verification one-time tokens backed by `user_action_tokens`
 - reset and verification emails are dispatched through a transactional email port
 - private reset and verification tokens are only exposed when `AUTH_EXPOSE_PRIVATE_TOKENS=true`
+- `POST /auth/password-reset/request` always returns `200` for frontend safety, even when the email does not exist
 - rate limiting on auth endpoints
 - bcrypt password hashing
 - JWT guard
@@ -262,6 +264,7 @@ Why:
 - stores `userId` and `organizationId` when available
 - supports lookup by `id`, `traceId`, and paginated filtering by `createdFrom`, `createdTo`, and `statusFamily`
 - read access is tenant-scoped and reinforced by PostgreSQL RLS plus fail-closed repository access
+- common sensitive fields such as `apiKey`, `clientSecret`, `resetToken`, `verificationToken`, `invitationToken`, and `privateKey` are redacted before persistence
 
 ### Usage Metering
 
@@ -277,6 +280,8 @@ Why:
 - outbound deliveries are persisted as durable outbox jobs and executed by the worker runtime
 - webhook payloads are signed with timestamped HMAC headers for downstream verification
 - delivery distinguishes retryable transport failures from non-retryable client errors and uses execution receipts for idempotent completion
+- targets are validated both at creation time and at delivery time
+- production defaults require HTTPS targets and block localhost/private-network destinations unless you explicitly opt in
 
 ### Audit Logs
 
@@ -293,6 +298,7 @@ Why:
 - current templates cover password reset, email verification, organization invitation, and self-register welcome
 - public URLs are composed from `APP_PUBLIC_URL` plus the configured path variables instead of being hard-coded inside use cases
 - the API can boot without SES credentials or connectivity while `EMAIL_ENABLED=false`; outbound email becomes a no-op until you opt in
+- synchronous organization invitation delivery compensates on email failure by expiring the invitation instead of leaving an active invite behind
 
 ### Async Jobs
 
@@ -312,14 +318,14 @@ Why:
 ## Runtime Baseline
 
 - runtime configuration is validated through `src/config/env/app-config.ts`
-- startup fails fast on invalid combinations such as `DB_SYNC=true` in production, `DB_POOL_MIN > DB_POOL_MAX`, or short JWT secrets
+- startup fails fast on invalid combinations such as `DB_SYNC=true` in production, `DB_POOL_MIN > DB_POOL_MAX`, short JWT/API-key secrets, `AUTH_EXPOSE_PRIVATE_TOKENS=true` in production, or unsafe production webhook target settings
 - `API_KEY_SECRET`, `API_KEY_DEFAULT_TTL_DAYS`, and `API_KEY_USAGE_WRITE_INTERVAL_MS` define the API key security baseline
 - `USAGE_METERING_ENABLED` enables aggregated PostgreSQL-backed API key usage counters
 - `JOBS_ENABLED`, `JOBS_PROVIDER`, `JOBS_SQS_*`, `JOBS_OUTBOX_*`, `JOBS_OUTBOX_CLAIM_TIMEOUT_MS`, and `JOBS_EMAIL_DELIVERY_MODE` define the async job runtime contract
 - `LOG_LEVEL`, `LOG_JSON`, and `LOG_SERVICE_NAME` define the external logging baseline
 - `EMAIL_ENABLED`, `EMAIL_SES_REGION`, `EMAIL_FROM_*`, `EMAIL_BRAND_NAME`, `APP_PUBLIC_URL`, and the email path variables define the outbound email contract
-- `WEBHOOKS_ENABLED`, `WEBHOOKS_TIMEOUT_MS`, and `WEBHOOKS_SECRET_ENCRYPTION_KEY` define the outbound webhook baseline
-- `HELMET_ENABLED`, `CORS_ENABLED`, `CORS_ORIGINS`, and `HTTP_BODY_LIMIT` define the HTTP hardening contract
+- `WEBHOOKS_ENABLED`, `WEBHOOKS_TIMEOUT_MS`, `WEBHOOKS_SECRET_ENCRYPTION_KEY`, `WEBHOOKS_REQUIRE_HTTPS`, and `WEBHOOKS_ALLOW_PRIVATE_TARGETS` define the outbound webhook baseline
+- `HELMET_ENABLED`, `CORS_ENABLED`, `CORS_ORIGINS`, `HTTP_TRUST_PROXY`, and `HTTP_BODY_LIMIT` define the HTTP hardening contract
 - `DB_SSL_ENABLED` and `DB_SSL_REJECT_UNAUTHORIZED` control explicit PostgreSQL TLS behavior instead of hard-coded defaults
 - successful and failed HTTP requests emit structured JSON lines to stdout/stderr with `traceId`, `userId`, and `organizationId` when available
 
@@ -337,6 +343,7 @@ Why:
 Detailed guide:
 
 - [Database Workflow](./docs/database-workflow.md)
+- [Frontend Integration Guide](./docs/frontend-integration-guide.md)
 - [Jobs Operations](./docs/jobs-operations.md)
 
 Commands:
@@ -385,6 +392,14 @@ If you had an older local database created from pre-squash migrations, reset tha
 - `.env` enables Swagger for local development
 - `.env.test` disables Swagger for e2e to keep the test surface minimal
 - the API uses Nest native URI versioning, so current endpoints are exposed under `/api/v1/...`
+
+## Frontend Integration
+
+- start with [Frontend Integration Guide](./docs/frontend-integration-guide.md) for the real client contract
+- use Swagger for the generated schema, but rely on the guide for runtime behaviors such as tenant headers, idempotency, one-time secrets, and generic auth recovery responses
+- JWT-authenticated tenant-scoped routes require `x-organization-id`
+- `@Idempotent()` endpoints require `Idempotency-Key`
+- errors use RFC 7807 problem details with `traceId`
 
 ## Worker Runtime
 

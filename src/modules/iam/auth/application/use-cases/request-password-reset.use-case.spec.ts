@@ -44,14 +44,36 @@ describe('RequestPasswordResetUseCase', () => {
 
     const response = await useCase.execute(user.email);
 
-    expect(response.resetToken).toEqual(expect.any(String));
+    expect(response).not.toBeNull();
+    expect(response?.resetToken).toEqual(expect.any(String));
     expect(create).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith({
       type: 'password_reset',
       to: user.email,
       recipientName: user.fullName,
-      resetToken: response.resetToken,
+      resetToken: response?.resetToken,
       expiresInMinutes: 15,
     });
+  });
+
+  it('returns null and avoids side effects when the user email does not exist', async () => {
+    findByEmail.mockResolvedValue(null);
+
+    const useCase = new RequestPasswordResetUseCase(
+      { findByEmail } as never,
+      {
+        findActiveByUserIdAndPurpose,
+        create,
+        update,
+      } as never,
+      { hash } as never,
+      { send } as never,
+      { runInTransaction } as never,
+      'sync',
+    );
+
+    await expect(useCase.execute('missing@example.com')).resolves.toBeNull();
+    expect(create).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 });

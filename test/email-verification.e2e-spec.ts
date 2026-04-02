@@ -7,7 +7,7 @@ import {
   resetE2eDatabase,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { loginUser, selfRegisterUser } from './support/iam-fixtures';
+import { createIdempotencyKey, loginUser, selfRegisterUser } from './support/iam-fixtures';
 
 describe('Email Verification API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -42,6 +42,7 @@ describe('Email Verification API (e2e, PostgreSQL)', () => {
     const requestVerificationResponse = await request(context.app.getHttpServer())
       .post('/api/v1/auth/email-verification/request')
       .set('Authorization', `Bearer ${loginResponse.body.accessToken}`)
+      .set('Idempotency-Key', createIdempotencyKey('email-verification-request'))
       .expect(200);
 
     expect(requestVerificationResponse.body.verificationToken).toEqual(expect.any(String));

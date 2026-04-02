@@ -6,7 +6,7 @@ import {
   resetE2eDatabase,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { selfRegisterUser } from './support/iam-fixtures';
+import { createIdempotencyKey, selfRegisterUser } from './support/iam-fixtures';
 
 describe('Async Email Outbox API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -51,6 +51,7 @@ describe('Async Email Outbox API (e2e, PostgreSQL)', () => {
 
     const requestResetResponse = await request(context.app.getHttpServer())
       .post('/api/v1/auth/password-reset/request')
+      .set('Idempotency-Key', createIdempotencyKey('password-reset-request'))
       .send({
         email: 'john@example.com',
       })

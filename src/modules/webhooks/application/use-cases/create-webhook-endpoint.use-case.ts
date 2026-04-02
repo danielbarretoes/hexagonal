@@ -4,9 +4,12 @@ import { ADMIN_AUDIT_PORT } from '../../../../shared/application/ports/admin-aud
 import { WEBHOOK_ENDPOINT_REPOSITORY_TOKEN } from '../../../../shared/application/ports/webhook-endpoint-repository.token';
 import { WEBHOOK_SECRET_CIPHER_TOKEN } from '../../../../shared/application/ports/webhook-secret-cipher.token';
 import type { AdminAuditPort } from '../../../../shared/domain/ports/admin-audit.port';
+import { getAppConfig } from '../../../../config/env/app-config';
 import type { WebhookEndpointRepositoryPort } from '../../domain/ports/webhook-endpoint.repository.port';
 import type { WebhookSecretCipherPort } from '../../domain/ports/webhook-secret-cipher.port';
 import { WebhookEndpoint } from '../../domain/entities/webhook-endpoint.entity';
+import { InvalidWebhookTargetException } from '../../domain/errors/invalid-webhook-target.exception';
+import { assertWebhookTargetAllowed } from '../../domain/webhook-target-policy';
 
 export interface CreateWebhookEndpointCommand {
   organizationId: string;
@@ -38,6 +41,20 @@ export class CreateWebhookEndpointUseCase {
   ) {}
 
   async execute(command: CreateWebhookEndpointCommand): Promise<CreateWebhookEndpointResponse> {
+    const webhookConfig = getAppConfig().webhooks;
+    let normalizedTargetUrl: string;
+
+    try {
+      normalizedTargetUrl = assertWebhookTargetAllowed(command.url, {
+        requireHttps: webhookConfig.requireHttps,
+        allowPrivateTargets: webhookConfig.allowPrivateTargets,
+      }).toString();
+    } catch (error) {
+      throw new InvalidWebhookTargetException(
+        error instanceof Error ? error.message : 'invalid target URL',
+      );
+    }
+
     const plaintextSecret = `whsec_${randomBytes(24).toString('hex')}`;
     const endpoint = await this.repository.create(
       WebhookEndpoint.create({
@@ -45,7 +62,7 @@ export class CreateWebhookEndpointUseCase {
         organizationId: command.organizationId,
         createdByUserId: command.actorUserId,
         name: command.name,
-        url: command.url,
+        url: normalizedTargetUrl,
         events: command.events,
         secretCiphertext: this.webhookSecretCipher.encrypt(plaintextSecret),
       }),

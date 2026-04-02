@@ -6,7 +6,7 @@ import {
   resetE2eDatabase,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { loginUser, selfRegisterUser } from './support/iam-fixtures';
+import { createIdempotencyKey, loginUser, selfRegisterUser } from './support/iam-fixtures';
 
 describe('Password Recovery API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -36,6 +36,7 @@ describe('Password Recovery API (e2e, PostgreSQL)', () => {
 
     const requestResetResponse = await request(context.app.getHttpServer())
       .post('/api/v1/auth/password-reset/request')
+      .set('Idempotency-Key', createIdempotencyKey('password-reset-request'))
       .send({
         email: 'john@example.com',
       })
@@ -53,5 +54,17 @@ describe('Password Recovery API (e2e, PostgreSQL)', () => {
 
     await loginUser(context.app.getHttpServer(), 'john@example.com').expect(401);
     await loginUser(context.app.getHttpServer(), 'john@example.com', 'NewPassword123').expect(200);
+  });
+
+  it('returns a generic success response when the email does not exist', async () => {
+    const response = await request(context.app.getHttpServer())
+      .post('/api/v1/auth/password-reset/request')
+      .set('Idempotency-Key', createIdempotencyKey('password-reset-missing'))
+      .send({
+        email: 'missing@example.com',
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({});
   });
 });

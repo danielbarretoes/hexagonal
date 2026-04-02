@@ -75,4 +75,11 @@ export class OrganizationInvitation {
       acceptedAt: new Date(),
     });
   }
+
+  expire(): OrganizationInvitation {
+    return new OrganizationInvitation({
+      ...this,
+      expiresAt: new Date(),
+    });
+  }
 }

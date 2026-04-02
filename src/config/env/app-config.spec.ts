@@ -72,9 +72,12 @@ describe('getAppConfig', () => {
       WEBHOOKS_TIMEOUT_MS: '10000',
       WEBHOOKS_SECRET_ENCRYPTION_KEY:
         'your-webhook-secret-change-in-production-minimum-32-characters',
+      WEBHOOKS_REQUIRE_HTTPS: 'true',
+      WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'false',
       HELMET_ENABLED: 'true',
       CORS_ENABLED: 'true',
       CORS_ORIGINS: 'https://app.example.com, https://admin.example.com',
+      HTTP_TRUST_PROXY: 'true',
       HTTP_BODY_LIMIT: '2mb',
     };
   });
@@ -111,6 +114,9 @@ describe('getAppConfig', () => {
       'https://app.example.com',
       'https://admin.example.com',
     ]);
+    expect(config.http.trustProxy).toBe(true);
+    expect(config.webhooks.requireHttps).toBe(true);
+    expect(config.webhooks.allowPrivateTargets).toBe(false);
   });
 
   it('rejects invalid env combinations early', async () => {
@@ -132,5 +138,17 @@ describe('getAppConfig', () => {
     const { getAppConfig } = require('./app-config') as typeof import('./app-config');
 
     expect(getAppConfig('development').auth.exposePrivateTokens).toBe(true);
+  });
+
+  it('rejects insecure webhook target settings in production', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.WEBHOOKS_REQUIRE_HTTPS = 'false';
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getAppConfig } = require('./app-config') as typeof import('./app-config');
+
+    expect(() => getAppConfig('production')).toThrow(
+      'WEBHOOKS_REQUIRE_HTTPS must be true in production',
+    );
   });
 });

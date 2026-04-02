@@ -156,7 +156,9 @@ export class UsersController {
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_USERS_WRITE)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Update a user profile within the current organization' })
+  @ApiOperation({
+    summary: 'Update a user profile when that identity is exclusive to the current organization',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ type: UpdateUserDto })
   @ApiOkResponse({ type: UserResponseDto })
@@ -183,7 +185,9 @@ export class UsersController {
   @RequirePermissions(PERMISSION_CODES.IAM_USERS_WRITE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Soft delete a user within the current organization' })
+  @ApiOperation({
+    summary: 'Soft delete a user identity that is exclusive to the current organization',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse()
   async delete(
@@ -199,7 +203,9 @@ export class UsersController {
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_USERS_WRITE)
   @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Restore a soft deleted user within the current organization' })
+  @ApiOperation({
+    summary: 'Restore a soft deleted user identity that is exclusive to the current organization',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: UserResponseDto })
   async restore(

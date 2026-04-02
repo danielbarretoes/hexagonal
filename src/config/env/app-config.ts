@@ -66,6 +66,7 @@ export interface AppConfig {
     helmetEnabled: boolean;
     corsEnabled: boolean;
     corsOrigins: CorsOrigins;
+    trustProxy: boolean;
     bodyLimit: string;
   };
   jobs: {
@@ -94,6 +95,8 @@ export interface AppConfig {
     enabled: boolean;
     timeoutMs: number;
     secretEncryptionKey: string;
+    requireHttps: boolean;
+    allowPrivateTargets: boolean;
   };
 }
 
@@ -239,6 +242,18 @@ function assertEnvironmentInvariants(config: AppConfig): void {
     throw new Error('WEBHOOKS_SECRET_ENCRYPTION_KEY must be at least 32 characters');
   }
 
+  if (config.nodeEnv === 'production' && config.webhooks.enabled && !config.webhooks.requireHttps) {
+    throw new Error('WEBHOOKS_REQUIRE_HTTPS must be true in production');
+  }
+
+  if (
+    config.nodeEnv === 'production' &&
+    config.webhooks.enabled &&
+    config.webhooks.allowPrivateTargets
+  ) {
+    throw new Error('WEBHOOKS_ALLOW_PRIVATE_TARGETS must be false in production');
+  }
+
   if (config.nodeEnv === 'production' && config.auth.exposePrivateTokens) {
     throw new Error('AUTH_EXPOSE_PRIVATE_TOKENS must be false in production');
   }
@@ -368,6 +383,7 @@ export function getAppConfig(explicitEnvironment?: RuntimeEnvironment): AppConfi
       helmetEnabled: getBoolean('HELMET_ENABLED', true),
       corsEnabled: getBoolean('CORS_ENABLED', true),
       corsOrigins: getCorsOrigins('CORS_ORIGINS'),
+      trustProxy: getBoolean('HTTP_TRUST_PROXY', false),
       bodyLimit: getRequiredString('HTTP_BODY_LIMIT', '1mb'),
     },
     jobs: {
@@ -405,6 +421,8 @@ export function getAppConfig(explicitEnvironment?: RuntimeEnvironment): AppConfi
       enabled: getBoolean('WEBHOOKS_ENABLED', true),
       timeoutMs: getPositiveInteger('WEBHOOKS_TIMEOUT_MS', 10000),
       secretEncryptionKey: webhookSecretEncryptionKey,
+      requireHttps: getBoolean('WEBHOOKS_REQUIRE_HTTPS', nodeEnv === 'production'),
+      allowPrivateTargets: getBoolean('WEBHOOKS_ALLOW_PRIVATE_TARGETS', nodeEnv !== 'production'),
     },
   };
 

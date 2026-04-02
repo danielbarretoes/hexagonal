@@ -6,7 +6,12 @@ import {
   resetE2eDatabase,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { createOrganization, loginUser, selfRegisterUser } from './support/iam-fixtures';
+import {
+  createIdempotencyKey,
+  createOrganization,
+  loginUser,
+  selfRegisterUser,
+} from './support/iam-fixtures';
 
 describe('Audit Trail API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -53,6 +58,7 @@ describe('Audit Trail API (e2e, PostgreSQL)', () => {
       .post('/api/v1/members')
       .set('Authorization', `Bearer ${ownerLoginResponse.body.accessToken}`)
       .set('x-organization-id', organizationResponse.body.id as string)
+      .set('Idempotency-Key', createIdempotencyKey('audit-member-add'))
       .send({
         userId: memberRegistration.body.id,
         roleCode: 'member',

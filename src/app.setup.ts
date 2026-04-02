@@ -28,6 +28,8 @@ export function configureHttpApplication(app: INestApplication): void {
     });
   }
 
+  expressApp.set('trust proxy', config.http.trustProxy);
+
   expressApp.useBodyParser('json', {
     limit: config.http.bodyLimit,
   });

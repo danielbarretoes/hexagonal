@@ -4,9 +4,15 @@ import {
   createE2eTestApp,
   destroyE2eTestApp,
   resetE2eDatabase,
+  waitForHttpLog,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { createOrganization, loginUser, selfRegisterUser } from './support/iam-fixtures';
+import {
+  createIdempotencyKey,
+  createOrganization,
+  loginUser,
+  selfRegisterUser,
+} from './support/iam-fixtures';
 
 describe('API Keys API (e2e, PostgreSQL)', () => {
   let context: E2eTestContext;
@@ -50,6 +56,7 @@ describe('API Keys API (e2e, PostgreSQL)', () => {
       .post('/api/v1/api-keys')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('x-organization-id', organizationId)
+      .set('Idempotency-Key', createIdempotencyKey('api-key-create'))
       .send({
         name: 'Scoped sync key',
         scopes: ['iam.members.read'],
@@ -62,6 +69,16 @@ describe('API Keys API (e2e, PostgreSQL)', () => {
 
     expect(apiKey).toContain('.');
     expect(createApiKeyResponse.body.scopes).toEqual(['iam.members.read']);
+
+    const createApiKeyLog = await waitForHttpLog(context.dataSource, {
+      method: 'POST',
+      path: '/api/v1/api-keys',
+      statusCode: 201,
+    });
+
+    expect(createApiKeyLog.responseBody).toMatchObject({
+      apiKey: '[REDACTED]',
+    });
 
     await request(context.app.getHttpServer())
       .get('/api/v1/members')

@@ -54,17 +54,14 @@ describe('RequestIdempotencyInterceptor', () => {
     expect(begin).not.toHaveBeenCalled();
   });
 
-  it('passes through when no idempotency key header is provided', async () => {
+  it('rejects idempotent requests without an idempotency key header', async () => {
     getAllAndOverride.mockReturnValue(true);
     const interceptor = new RequestIdempotencyInterceptor(reflector, requestIdempotency as never);
     const next = { handle: () => of({ ok: true }) } as CallHandler;
 
-    const observable = await interceptor.intercept(
-      createContext({ headers: {}, method: 'POST', path: '/users' }),
-      next,
-    );
-
-    await expect(observableToPromise(observable)).resolves.toEqual({ ok: true });
+    await expect(
+      interceptor.intercept(createContext({ headers: {}, method: 'POST', path: '/users' }), next),
+    ).rejects.toThrow('Idempotency-Key header is required for this endpoint');
     expect(begin).not.toHaveBeenCalled();
   });
 

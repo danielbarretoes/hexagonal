@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   CallHandler,
   ExecutionContext,
   Inject,
@@ -48,7 +49,7 @@ export class RequestIdempotencyInterceptor implements NestInterceptor {
     const idempotencyKey = this.extractIdempotencyKey(request);
 
     if (!idempotencyKey) {
-      return next.handle();
+      throw new BadRequestException('Idempotency-Key header is required for this endpoint');
     }
 
     const resolution = await this.requestIdempotency.begin({

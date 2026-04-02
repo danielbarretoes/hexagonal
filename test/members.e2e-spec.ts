@@ -6,7 +6,12 @@ import {
   resetE2eDatabase,
   waitForHttpLogsToDrain,
 } from './support/e2e-app';
-import { createOrganization, loginUser, selfRegisterUser } from './support/iam-fixtures';
+import {
+  createIdempotencyKey,
+  createOrganization,
+  loginUser,
+  selfRegisterUser,
+} from './support/iam-fixtures';
 
 interface MemberListItem {
   id: string;
@@ -60,6 +65,7 @@ describe('Members API (e2e, PostgreSQL)', () => {
       .post('/api/v1/members')
       .set('Authorization', `Bearer ${accessToken}`)
       .set('x-organization-id', organizationId)
+      .set('Idempotency-Key', createIdempotencyKey('member-add'))
       .send({
         userId: memberRegistration.body.id,
       })

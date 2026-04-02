@@ -91,4 +91,28 @@ describe('FetchWebhookDeliveryClientAdapter', () => {
       }),
     ).rejects.toThrow('Webhook delivery failed with status 422');
   });
+
+  it('rejects private targets when private delivery targets are disabled', async () => {
+    process.env.WEBHOOKS_ALLOW_PRIVATE_TARGETS = 'false';
+    process.env.WEBHOOKS_REQUIRE_HTTPS = 'true';
+    global.fetch = jest.fn() as never;
+
+    const adapter = new FetchWebhookDeliveryClientAdapter();
+
+    await expect(
+      adapter.deliver({
+        url: 'https://localhost/webhooks',
+        secret: 'whsec_test',
+        event: {
+          id: 'event-1',
+          type: 'iam.member.added',
+          occurredAt: '2026-04-01T00:00:00.000Z',
+          organizationId: 'org-1',
+          data: {},
+        },
+      }),
+    ).rejects.toThrow('private or local network targets are not allowed');
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

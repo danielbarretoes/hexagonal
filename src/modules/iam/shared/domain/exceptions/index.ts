@@ -36,6 +36,15 @@ export class CannotManageOwnUserException extends DomainException {
   }
 }
 
+export class SharedUserIdentityManagementNotAllowedException extends DomainException {
+  constructor(userId: string) {
+    super(
+      `User ${userId} belongs to multiple organizations and cannot be mutated from tenant-scoped user management`,
+      'SHARED_USER_IDENTITY_MANAGEMENT_NOT_ALLOWED',
+    );
+  }
+}
+
 export class InvalidCredentialsException extends DomainException {
   constructor() {
     super('Invalid email or password', 'INVALID_CREDENTIALS');

@@ -7,6 +7,7 @@ import type {
   WebhookDeliveryResult,
 } from '../../domain/ports/webhook-delivery-client.port';
 import { NonRetryableWebhookDeliveryError } from '../../domain/errors/non-retryable-webhook-delivery.error';
+import { assertWebhookTargetAllowed } from '../../domain/webhook-target-policy';
 
 class RetryableWebhookDeliveryError extends Error {
   constructor(
@@ -20,6 +21,20 @@ class RetryableWebhookDeliveryError extends Error {
 @Injectable()
 export class FetchWebhookDeliveryClientAdapter implements WebhookDeliveryClientPort {
   async deliver(command: DeliverWebhookCommand): Promise<WebhookDeliveryResult> {
+    const webhookConfig = getAppConfig().webhooks;
+    let targetUrl: string;
+
+    try {
+      targetUrl = assertWebhookTargetAllowed(command.url, {
+        requireHttps: webhookConfig.requireHttps,
+        allowPrivateTargets: webhookConfig.allowPrivateTargets,
+      }).toString();
+    } catch (error) {
+      throw new NonRetryableWebhookDeliveryError(
+        error instanceof Error ? error.message : 'Webhook target is not allowed',
+      );
+    }
+
     const body = JSON.stringify({
       id: command.event.id,
       type: command.event.type,
@@ -32,7 +47,7 @@ export class FetchWebhookDeliveryClientAdapter implements WebhookDeliveryClientP
       .update(`${timestamp}.${body}`)
       .digest('hex');
 
-    const response = await fetch(command.url, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

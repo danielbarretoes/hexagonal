@@ -112,7 +112,7 @@ export class AuthController {
   async requestPasswordReset(@Body() body: RequestPasswordResetDto) {
     const response = await this.requestPasswordResetUseCase.execute(body.email);
 
-    return getAuthRuntimeConfig().exposePrivateTokens ? response : {};
+    return getAuthRuntimeConfig().exposePrivateTokens && response ? response : {};
   }
 
   @Post('password-reset/confirm')

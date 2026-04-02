@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 
 export interface SelfRegisterUserInput {
@@ -7,12 +8,17 @@ export interface SelfRegisterUserInput {
   lastName?: string;
 }
 
+export function createIdempotencyKey(label = 'test'): string {
+  return `${label}-${randomUUID()}`;
+}
+
 export function selfRegisterUser(
   httpServer: Parameters<typeof request>[0],
   input: SelfRegisterUserInput,
 ) {
   return request(httpServer)
     .post('/api/v1/users/self-register')
+    .set('Idempotency-Key', createIdempotencyKey('self-register'))
     .send({
       password: input.password ?? 'Password123',
       firstName: input.firstName ?? 'John',
@@ -40,6 +46,7 @@ export function createOrganization(
   return request(httpServer)
     .post('/api/v1/organizations')
     .set('Authorization', `Bearer ${accessToken}`)
+    .set('Idempotency-Key', createIdempotencyKey('organization-create'))
     .send({ name });
 }
 
@@ -53,6 +60,7 @@ export function createTenantUser(
     .post('/api/v1/users')
     .set('Authorization', `Bearer ${accessToken}`)
     .set('x-organization-id', organizationId)
+    .set('Idempotency-Key', createIdempotencyKey('tenant-user-create'))
     .send({
       password: input.password ?? 'Password123',
       firstName: input.firstName ?? 'Jane',

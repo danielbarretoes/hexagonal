@@ -4,21 +4,29 @@ describe('http-log serializer', () => {
   it('redacts sensitive fields recursively', () => {
     const payload = sanitizeHttpLogPayload({
       password: 'Password123',
+      apiKey: 'hex_live_123.secret',
       nested: {
         accessToken: 'secret-token',
+        verificationToken: 'opaque-verification-token',
       },
+      invitationToken: 'opaque-invitation-token',
       profile: {
         firstName: 'John',
+        resetToken: 'opaque-reset-token',
       },
     });
 
     expect(payload).toEqual({
       password: '[REDACTED]',
+      apiKey: '[REDACTED]',
       nested: {
         accessToken: '[REDACTED]',
+        verificationToken: '[REDACTED]',
       },
+      invitationToken: '[REDACTED]',
       profile: {
         firstName: 'John',
+        resetToken: '[REDACTED]',
       },
     });
   });
