@@ -19,6 +19,7 @@ import { OrganizationInvitationResponseDto } from '../dto/organization-invitatio
 import { AcceptOrganizationInvitationDto } from '../dto/accept-organization-invitation.dto';
 import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
 import { Idempotent } from '../../../../../common/http/decorators/idempotent.decorator';
+import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
 import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
 
@@ -32,6 +33,7 @@ export class OrganizationInvitationsController {
 
   @Post()
   @Idempotent()
+  @TenantScoped()
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_MEMBERS_WRITE)
   @ApiBearerAuth('bearer')

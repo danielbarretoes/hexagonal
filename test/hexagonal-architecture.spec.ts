@@ -303,4 +303,22 @@ describe('hexagonal architecture', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it('does not allow controllers using @CurrentOrganizationId() to omit @TenantScoped()', () => {
+    const controllerFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src/modules')).filter(
+      (filePath) => filePath.includes('/presentation/controllers/'),
+    );
+
+    const offenders = controllerFiles.flatMap((filePath) => {
+      const content = fs.readFileSync(filePath, 'utf8');
+
+      if (!content.includes('@CurrentOrganizationId()')) {
+        return [];
+      }
+
+      return content.includes('@TenantScoped()') ? [] : [filePath];
+    });
+
+    expect(offenders).toEqual([]);
+  });
 });

@@ -7,15 +7,15 @@
 import { AsyncLocalStorage } from 'async_hooks';
 
 export interface TenantInfo {
-  organizationId: string;
   userId: string;
+  organizationId?: string;
 }
 
 export class TenantContext {
-  private static storage = new AsyncLocalStorage<TenantInfo>();
+  private static storage = new AsyncLocalStorage<TenantInfo | undefined>();
 
   static run<T>(info: TenantInfo | undefined, callback: () => T): T {
-    return this.storage.run(info as TenantInfo, callback);
+    return this.storage.run(info, callback);
   }
 
   static getTenant(): TenantInfo | undefined {

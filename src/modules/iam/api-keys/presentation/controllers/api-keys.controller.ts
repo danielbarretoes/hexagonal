@@ -26,6 +26,7 @@ import { CurrentOrganizationId } from '../../../../../common/http/decorators/cur
 import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
 import { Idempotent } from '../../../../../common/http/decorators/idempotent.decorator';
 import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
+import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
 import { PaginationQueryDto } from '../../../../../shared/contracts/http/pagination-query.dto';
@@ -39,6 +40,7 @@ import { PaginatedApiKeysResponseDto } from '../dto/paginated-api-keys-response.
 import { CreateApiKeyDto } from '../dto/create-api-key.dto';
 
 @ApiTags('API Keys')
+@TenantScoped()
 @Controller({ path: 'api-keys', version: '1' })
 export class ApiKeysController {
   constructor(

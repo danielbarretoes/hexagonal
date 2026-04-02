@@ -26,6 +26,7 @@ import { CurrentOrganizationId } from '../../../../common/http/decorators/curren
 import { CurrentUser } from '../../../../common/http/decorators/current-user.decorator';
 import { Idempotent } from '../../../../common/http/decorators/idempotent.decorator';
 import { RequirePermissions } from '../../../../common/http/decorators/require-permissions.decorator';
+import { TenantScoped } from '../../../../common/http/decorators/tenant-scoped.decorator';
 import { PermissionGuard } from '../../../../common/http/guards/permission.guard';
 import type { AuthenticatedUserPayload } from '../../../../common/http/authenticated-request';
 import { PaginationQueryDto } from '../../../../shared/contracts/http/pagination-query.dto';
@@ -39,6 +40,7 @@ import { PaginatedWebhookEndpointsResponseDto } from '../dto/paginated-webhook-e
 import { WebhookEndpointCreatedResponseDto } from '../dto/webhook-endpoint-response.dto';
 
 @ApiTags('Webhooks')
+@TenantScoped()
 @Controller({ path: 'webhooks', version: '1' })
 export class WebhooksController {
   constructor(

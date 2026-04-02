@@ -24,6 +24,7 @@ import { AccessAuthGuard } from '../../../auth/presentation/guards/access-auth.g
 import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
 import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
 import { Idempotent } from '../../../../../common/http/decorators/idempotent.decorator';
+import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
 import { CurrentOrganizationId } from '../../../../../common/http/decorators/current-organization-id.decorator';
 import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
@@ -37,6 +38,7 @@ import { MemberResponseDto } from '../dto/member-response.dto';
 import { UpdateMemberRoleDto } from '../dto/update-member-role.dto';
 
 @ApiTags('Members')
+@TenantScoped()
 @Controller({ path: 'members', version: '1' })
 export class MembersController {
   constructor(

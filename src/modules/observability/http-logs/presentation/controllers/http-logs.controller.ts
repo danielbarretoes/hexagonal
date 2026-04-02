@@ -16,11 +16,13 @@ import { HttpLogResponseDto } from '../dto/http-log-response.dto';
 import { ListHttpLogsQueryDto } from '../dto/list-http-logs-query.dto';
 import { PaginatedHttpLogsResponseDto } from '../dto/paginated-http-logs-response.dto';
 import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
+import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
 import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
 
 @ApiTags('HTTP Logs')
 @ApiBearerAuth('bearer')
+@TenantScoped()
 @UseGuards(AccessAuthGuard, PermissionGuard)
 @RequirePermissions(PERMISSION_CODES.OBSERVABILITY_HTTP_LOGS_READ)
 @Controller({ path: 'http-logs', version: '1' })

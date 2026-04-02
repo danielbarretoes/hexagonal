@@ -45,6 +45,7 @@ import { Idempotent } from '../../../../../common/http/decorators/idempotent.dec
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
 import { CurrentOrganizationId } from '../../../../../common/http/decorators/current-organization-id.decorator';
 import { RequirePermissions } from '../../../../../common/http/decorators/require-permissions.decorator';
+import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import { PermissionGuard } from '../../../../../common/http/guards/permission.guard';
 import { PERMISSION_CODES } from '../../../../../shared/domain/authorization/permission-codes';
 
@@ -100,6 +101,7 @@ export class OrganizationsController {
   }
 
   @Get(':id')
+  @TenantScoped()
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_READ)
   @ApiBearerAuth('bearer')
@@ -120,6 +122,7 @@ export class OrganizationsController {
   }
 
   @Patch(':id')
+  @TenantScoped()
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
   @ApiBearerAuth('bearer')
@@ -142,6 +145,7 @@ export class OrganizationsController {
   }
 
   @Delete(':id')
+  @TenantScoped()
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -157,6 +161,7 @@ export class OrganizationsController {
   }
 
   @Patch(':id/restore')
+  @TenantScoped()
   @UseGuards(AccessAuthGuard, PermissionGuard)
   @RequirePermissions(PERMISSION_CODES.IAM_ORGANIZATIONS_WRITE)
   @ApiBearerAuth('bearer')

@@ -30,9 +30,9 @@ describe('TenantContext', () => {
       expect(TenantContext.getOrganizationId()).toBeUndefined();
     });
 
-    it('should return empty string when organizationId is empty', () => {
-      TenantContext.run({ organizationId: '', userId: 'user-456' }, () => {
-        expect(TenantContext.getOrganizationId()).toBe('');
+    it('should return undefined when the scope only carries user identity', () => {
+      TenantContext.run({ userId: 'user-456' }, () => {
+        expect(TenantContext.getOrganizationId()).toBeUndefined();
       });
     });
   });

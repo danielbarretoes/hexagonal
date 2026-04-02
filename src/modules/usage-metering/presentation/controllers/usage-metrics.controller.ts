@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentOrganizationId } from '../../../../common/http/decorators/current-organization-id.decorator';
 import { RequirePermissions } from '../../../../common/http/decorators/require-permissions.decorator';
+import { TenantScoped } from '../../../../common/http/decorators/tenant-scoped.decorator';
 import { PermissionGuard } from '../../../../common/http/guards/permission.guard';
 import { PERMISSION_CODES } from '../../../../shared/domain/authorization/permission-codes';
 import { JwtAuthGuard } from '../../../iam/auth/presentation/guards/jwt-auth.guard';
@@ -12,6 +13,7 @@ import {
 } from '../dto/get-api-key-usage-summary.dto';
 
 @ApiTags('Usage Metrics')
+@TenantScoped()
 @Controller({ path: 'usage-metrics', version: '1' })
 export class UsageMetricsController {
   constructor(private readonly getApiKeyUsageSummaryUseCase: GetApiKeyUsageSummaryUseCase) {}

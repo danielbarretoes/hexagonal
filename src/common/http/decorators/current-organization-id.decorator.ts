@@ -1,15 +1,14 @@
-import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
+import { ForbiddenException, createParamDecorator, type ExecutionContext } from '@nestjs/common';
 import type { AuthenticatedHttpRequest } from '../authenticated-request';
 
 export const CurrentOrganizationId = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<AuthenticatedHttpRequest>();
 
-    if (request.effectiveOrganizationId) {
-      return request.effectiveOrganizationId;
+    if (!request.effectiveOrganizationId) {
+      throw new ForbiddenException('Validated tenant context is required for this route');
     }
 
-    const organizationHeader = request.headers['x-organization-id'];
-    return typeof organizationHeader === 'string' ? organizationHeader.trim() : undefined;
+    return request.effectiveOrganizationId;
   },
 );
