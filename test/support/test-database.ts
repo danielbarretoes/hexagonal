@@ -45,8 +45,44 @@ export function useTestDatabaseEnvironment(): void {
   });
 }
 
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+async function ensureDatabaseExists(): Promise<void> {
+  const databaseName = process.env.DB_DATABASE;
+
+  if (!databaseName) {
+    throw new Error('DB_DATABASE must be configured for test database bootstrap');
+  }
+
+  const adminClient = new Client({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
+    database: 'postgres',
+  });
+
+  await adminClient.connect();
+
+  try {
+    const result = await adminClient.query<{ exists: boolean }>(
+      'SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS "exists"',
+      [databaseName],
+    );
+
+    if (!result.rows[0]?.exists) {
+      await adminClient.query(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
+    }
+  } finally {
+    await adminClient.end();
+  }
+}
+
 export async function resetTestDatabase(): Promise<DataSource> {
   useTestDatabaseEnvironment();
+  await ensureDatabaseExists();
 
   let lastError: unknown;
 

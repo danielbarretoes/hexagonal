@@ -1,13 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { getAppConfig } from '../../../../config/env/app-config';
 import type { WebhookSecretCipherPort } from '../../domain/ports/webhook-secret-cipher.port';
+import {
+  WEBHOOKS_RUNTIME_OPTIONS,
+  type WebhooksRuntimeOptions,
+} from '../../application/ports/webhooks-runtime-options.token';
 
 @Injectable()
 export class AesWebhookSecretCipherAdapter implements WebhookSecretCipherPort {
-  private readonly key = createHash('sha256')
-    .update(getAppConfig().webhooks.secretEncryptionKey)
-    .digest();
+  private readonly key: Buffer;
+
+  constructor(
+    @Inject(WEBHOOKS_RUNTIME_OPTIONS)
+    webhooksRuntimeOptions: WebhooksRuntimeOptions,
+  ) {
+    this.key = createHash('sha256').update(webhooksRuntimeOptions.secretEncryptionKey).digest();
+  }
 
   encrypt(secret: string): string {
     const iv = randomBytes(12);

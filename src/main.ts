@@ -6,6 +6,7 @@
 import { ConsoleLogger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { initializeStructuredLoggingRuntime } from './common/observability/logging/logging-runtime';
 import { writeStructuredLog } from './common/observability/logging/structured-log.util';
 import { AppModule } from './app.module';
 import { configureHttpApplication } from './app.setup';
@@ -14,6 +15,12 @@ import { isSwaggerEnabled } from './config/swagger/swagger.config';
 
 async function bootstrap(): Promise<void> {
   const config = getAppConfig();
+  initializeStructuredLoggingRuntime({
+    enabledLevels: config.logging.enabledLevels,
+    json: config.logging.json,
+    serviceName: config.logging.serviceName,
+    environment: config.nodeEnv,
+  });
   const logger = new ConsoleLogger('Bootstrap', {
     json: config.logging.json,
     logLevels: config.logging.enabledLevels,

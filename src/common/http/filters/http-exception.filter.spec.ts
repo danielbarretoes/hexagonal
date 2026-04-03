@@ -16,7 +16,10 @@ describe('GlobalExceptionFilter', () => {
   let mockHost: ArgumentsHost;
 
   beforeEach(() => {
-    filter = new GlobalExceptionFilter();
+    filter = new GlobalExceptionFilter({
+      baseUrl: 'https://api.hexagonal.com',
+      exposeUnexpectedDetails: true,
+    });
 
     mockResponse = {
       status: jest.fn().mockReturnThis(),
@@ -186,8 +189,10 @@ describe('GlobalExceptionFilter', () => {
     });
 
     it('should hide error message in production', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      filter = new GlobalExceptionFilter({
+        baseUrl: 'https://api.hexagonal.com',
+        exposeUnexpectedDetails: false,
+      });
 
       const exception = new Error('Sensitive error details');
 
@@ -198,13 +203,13 @@ describe('GlobalExceptionFilter', () => {
           detail: 'An unexpected error occurred. Please try again later.',
         }),
       );
-
-      process.env.NODE_ENV = originalEnv;
     });
 
     it('should show error message in development', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      filter = new GlobalExceptionFilter({
+        baseUrl: 'https://api.hexagonal.com',
+        exposeUnexpectedDetails: true,
+      });
 
       const exception = new Error('Debug error details');
 
@@ -215,8 +220,6 @@ describe('GlobalExceptionFilter', () => {
           detail: 'Debug error details',
         }),
       );
-
-      process.env.NODE_ENV = originalEnv;
     });
   });
 

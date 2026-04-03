@@ -1,5 +1,6 @@
 import { ConsoleLogger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { initializeStructuredLoggingRuntime } from './common/observability/logging/logging-runtime';
 import { writeStructuredLog } from './common/observability/logging/structured-log.util';
 import { getAppConfig } from './config/env/app-config';
 import { OutboxInspectionService } from './modules/jobs/application/outbox-inspection.service';
@@ -35,6 +36,12 @@ export function parseInspectCommand(argv: readonly string[]): InspectCommand {
 
 async function bootstrap(): Promise<void> {
   const config = getAppConfig();
+  initializeStructuredLoggingRuntime({
+    enabledLevels: config.logging.enabledLevels,
+    json: config.logging.json,
+    serviceName: config.logging.serviceName,
+    environment: config.nodeEnv,
+  });
   const logger = new ConsoleLogger('JobsInspectBootstrap', {
     json: config.logging.json,
     logLevels: config.logging.enabledLevels,

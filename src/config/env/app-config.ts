@@ -25,6 +25,7 @@ export interface AppConfig {
     idleTimeoutMs: number;
     sslEnabled: boolean;
     sslRejectUnauthorized: boolean;
+    rlsRuntimeRole: string;
   };
   auth: {
     jwtSecret: string;
@@ -339,6 +340,7 @@ export function getAppConfig(explicitEnvironment?: RuntimeEnvironment): AppConfi
       idleTimeoutMs: getPositiveInteger('DB_IDLE_TIMEOUT', 10000),
       sslEnabled: getBoolean('DB_SSL_ENABLED', false),
       sslRejectUnauthorized: getBoolean('DB_SSL_REJECT_UNAUTHORIZED', true),
+      rlsRuntimeRole: getRequiredString('DB_RLS_RUNTIME_ROLE', 'hexagonal_app_runtime'),
     },
     auth: {
       jwtSecret,

@@ -1,8 +1,6 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import { TypeormTransactionContext } from './typeorm-transaction.context';
 
-const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
-
 export async function withTypeormManager<T>(
   dataSource: DataSource,
   operation: (manager: EntityManager) => Promise<T>,
@@ -19,8 +17,9 @@ export async function withTypeormManager<T>(
 export async function applyTypeormRlsContext(
   manager: EntityManager,
   settings: Record<string, string>,
+  runtimeRole: string,
 ): Promise<void> {
-  await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+  await manager.query(`SET LOCAL ROLE ${runtimeRole}`);
 
   for (const [settingName, settingValue] of Object.entries(settings)) {
     await manager.query(`SELECT set_config($1, $2, true)`, [settingName, settingValue]);

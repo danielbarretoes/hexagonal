@@ -7,41 +7,22 @@ jest.mock('../../../../../common/observability/logging/structured-log.util', () 
 }));
 
 describe('SesTransactionalEmailAdapter', () => {
-  const originalEnv = { ...process.env };
+  const emailRuntimeOptions = {
+    enabled: true,
+    provider: 'ses',
+    sesRegion: 'us-east-1',
+    fromEmail: 'noreply@hexagonal.test',
+    fromName: 'Hexagonal Test',
+    brandName: 'Hexagonal Test',
+    appPublicUrl: 'https://app.hexagonal.test',
+    passwordResetPath: '/reset-password',
+    emailVerificationPath: '/verify-email',
+    invitationPath: '/accept-invitation',
+    welcomePath: '/login',
+  } as const;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.resetModules();
-    process.env = {
-      ...originalEnv,
-      NODE_ENV: 'test',
-      API_BASE_URL: 'https://api.hexagonal.test',
-      APP_PUBLIC_URL: 'https://app.hexagonal.test',
-      EMAIL_ENABLED: 'true',
-      EMAIL_SES_REGION: 'us-east-1',
-      EMAIL_FROM_EMAIL: 'noreply@hexagonal.test',
-      EMAIL_FROM_NAME: 'Hexagonal Test',
-      EMAIL_BRAND_NAME: 'Hexagonal Test',
-      EMAIL_PASSWORD_RESET_PATH: '/reset-password',
-      EMAIL_VERIFICATION_PATH: '/verify-email',
-      EMAIL_INVITATION_PATH: '/accept-invitation',
-      EMAIL_WELCOME_PATH: '/login',
-      JWT_SECRET: 'your-super-secret-key-change-in-production-minimum-32-characters',
-      JWT_EXPIRES_IN: '15m',
-      DB_HOST: 'localhost',
-      DB_PORT: '5432',
-      DB_USERNAME: 'postgres',
-      DB_PASSWORD: 'postgres',
-      DB_DATABASE: 'hexagonal_test_db',
-      LOG_LEVEL: 'debug',
-      LOG_JSON: 'false',
-      LOG_SERVICE_NAME: 'hexagonal-api-test',
-      HTTP_BODY_LIMIT: '1mb',
-    };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
   });
 
   it('maps a transactional message into the SESv2 SendEmailCommand payload', async () => {
@@ -49,7 +30,8 @@ describe('SesTransactionalEmailAdapter', () => {
 
     const adapter = new SesTransactionalEmailAdapter(
       { send } as never,
-      new TransactionalEmailTemplateFactory(),
+      new TransactionalEmailTemplateFactory(emailRuntimeOptions),
+      emailRuntimeOptions,
     );
 
     await adapter.send({
@@ -73,7 +55,8 @@ describe('SesTransactionalEmailAdapter', () => {
 
     const adapter = new SesTransactionalEmailAdapter(
       { send } as never,
-      new TransactionalEmailTemplateFactory(),
+      new TransactionalEmailTemplateFactory(emailRuntimeOptions),
+      emailRuntimeOptions,
     );
 
     await expect(

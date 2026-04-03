@@ -10,7 +10,7 @@ import type { PasswordHasherPort } from '../../../shared/domain/ports/password-h
 import { AuthSession } from '../../domain/entities/auth-session.entity';
 import { SessionNotFoundException, UserNotFoundException } from '../../../shared/domain/exceptions';
 import { parseOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
-import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
+import { AUTH_RUNTIME_OPTIONS, type AuthRuntimeOptions } from '../ports/auth-runtime-options.token';
 
 export interface RefreshSessionResponse {
   accessToken: string;
@@ -30,6 +30,8 @@ export class RefreshSessionUseCase {
     private readonly jwtTokenPort: JwtTokenPort,
     @Inject(PASSWORD_HASHER_PORT)
     private readonly passwordHasher: PasswordHasherPort,
+    @Inject(AUTH_RUNTIME_OPTIONS)
+    private readonly authRuntimeOptions: AuthRuntimeOptions,
   ) {}
 
   async execute(refreshToken: string): Promise<RefreshSessionResponse> {
@@ -64,7 +66,7 @@ export class RefreshSessionUseCase {
     const nextTokenHash = await this.passwordHasher.hash(nextSecret);
     const rotatedSession = session.rotate(
       nextTokenHash,
-      new Date(Date.now() + getAuthRuntimeConfig().refreshSessionTtlMs),
+      new Date(Date.now() + this.authRuntimeOptions.refreshSessionTtlMs),
     );
 
     await this.authSessionRepository.update(rotatedSession);

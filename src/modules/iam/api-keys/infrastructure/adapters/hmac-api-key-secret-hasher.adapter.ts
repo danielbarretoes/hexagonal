@@ -1,14 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { getAppConfig } from '../../../../../config/env/app-config';
 import type { ApiKeySecretHasherPort } from '../../domain/ports/api-key-secret-hasher.port';
+import {
+  API_KEYS_RUNTIME_OPTIONS,
+  type ApiKeysRuntimeOptions,
+} from '../../application/ports/api-keys-runtime-options.token';
 
 @Injectable()
 export class HmacApiKeySecretHasherAdapter implements ApiKeySecretHasherPort {
-  private readonly secret = getAppConfig().apiKeys.secret;
+  constructor(
+    @Inject(API_KEYS_RUNTIME_OPTIONS)
+    private readonly apiKeysRuntimeOptions: ApiKeysRuntimeOptions,
+  ) {}
 
   hash(secret: string): string {
-    return createHmac('sha256', this.secret).update(secret).digest('hex');
+    return createHmac('sha256', this.apiKeysRuntimeOptions.secret).update(secret).digest('hex');
   }
 
   verify(secret: string, secretHash: string): boolean {

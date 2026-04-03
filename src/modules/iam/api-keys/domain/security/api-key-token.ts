@@ -1,4 +1,4 @@
-import type { RuntimeEnvironment } from '../../../../../config/env/load-env';
+import type { RuntimeEnvironment } from '../../../../../shared/domain/runtime/runtime-environment';
 import { randomBytes } from 'node:crypto';
 
 const API_KEY_PREFIX_BY_ENVIRONMENT: Record<RuntimeEnvironment, string> = {

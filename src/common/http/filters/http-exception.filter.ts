@@ -11,14 +11,23 @@ import { DomainException } from '../../../shared/domain/exceptions';
 import type { HttpLogRequest } from '../http-log-context';
 import {
   ProblemDetail,
+  createErrorType,
   ValidationProblemDetail,
   ValidationErrorDetail,
-  createErrorType,
-  ERROR_TYPE_BASE_URL,
 } from './rfc-7807.types';
+import type { ProblemDetailsRuntimeOptions } from './problem-details-runtime-options.token';
+
+const DEFAULT_RUNTIME_OPTIONS: ProblemDetailsRuntimeOptions = {
+  baseUrl: 'https://api.hexagonal.com',
+  exposeUnexpectedDetails: true,
+};
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  constructor(
+    private readonly runtimeOptions: ProblemDetailsRuntimeOptions = DEFAULT_RUNTIME_OPTIONS,
+  ) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -94,7 +103,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     });
 
     return {
-      'type': createErrorType(ERROR_TYPE_BASE_URL, 'validation-failed'),
+      'type': createErrorType(this.runtimeOptions.baseUrl, 'validation-failed'),
       'title': 'Your request parameters did not validate.',
       'status': HttpStatus.BAD_REQUEST,
       'detail': 'One or more fields in your request failed validation.',
@@ -127,7 +136,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const errorCode = this.getErrorCodeFromStatus(status);
 
     return {
-      type: createErrorType(ERROR_TYPE_BASE_URL, errorCode),
+      type: createErrorType(this.runtimeOptions.baseUrl, errorCode),
       title,
       status,
       detail,
@@ -147,7 +156,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     instance: string,
   ): ProblemDetail {
     return {
-      type: createErrorType(ERROR_TYPE_BASE_URL, exception.code.toLowerCase().replaceAll('_', '-')),
+      type: createErrorType(
+        this.runtimeOptions.baseUrl,
+        exception.code.toLowerCase().replaceAll('_', '-'),
+      ),
       title: exception.name,
       status,
       detail: exception.message,
@@ -168,13 +180,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const domainException = exception as Error & { code?: string };
 
     return {
-      type: createErrorType(ERROR_TYPE_BASE_URL, domainException.code || 'internal-server-error'),
+      type: createErrorType(
+        this.runtimeOptions.baseUrl,
+        domainException.code || 'internal-server-error',
+      ),
       title: 'Internal Server Error',
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      detail:
-        process.env.NODE_ENV === 'production'
-          ? 'An unexpected error occurred. Please try again later.'
-          : exception.message,
+      detail: this.runtimeOptions.exposeUnexpectedDetails
+        ? exception.message
+        : 'An unexpected error occurred. Please try again later.',
       instance,
       timestamp: new Date().toISOString(),
       traceId,
@@ -191,7 +205,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     instance: string,
   ): ProblemDetail {
     return {
-      type: createErrorType(ERROR_TYPE_BASE_URL, 'internal-server-error'),
+      type: createErrorType(this.runtimeOptions.baseUrl, 'internal-server-error'),
       title,
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       detail,

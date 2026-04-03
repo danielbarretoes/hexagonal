@@ -1,7 +1,7 @@
 {
-  "name": "hexagonal",
+  "name": "nest-saas-template",
   "version": "0.0.1",
-  "description": "Hexagonal Architecture NestJS Project",
+  "description": "Modular NestJS SaaS template with IAM, jobs, observability, and enforceable architectural boundaries.",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -27,12 +27,13 @@
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest --coverage --logHeapUsage",
     "test:arch": "jest --runInBand --coverage=false --runTestsByPath test/hexagonal-architecture.spec.ts",
+    "test:smoke:presets": "jest --runInBand --coverage=false --runTestsByPath test/presets.smoke.spec.ts",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:all": "npm run test:arch && npm run test -- --runInBand && npm run test:e2e -- --runInBand",
-    "test:ci": "npm run lint:check && npm run build && npm run test:arch && npm run test -- --runInBand && npm run test:e2e -- --runInBand",
+    "test:all": "npm run test:arch && npm run test:smoke:presets && npm run test -- --runInBand && npm run test:e2e -- --runInBand",
+    "test:ci": "npm run lint:check && npm run build && npm run test:arch && npm run test:smoke:presets && npm run test -- --runInBand && npm run test:e2e -- --runInBand",
     "test:log": "jest --coverage --logHeapUsage --testResultsProcessor=./test/support/jest-test-processor.js --rootDir=.",
     "db:migrate": "node -r dotenv/config -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/config/database/data-source.ts migration:run",
     "db:migrate:revert": "node -r dotenv/config -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/config/database/data-source.ts migration:revert",
@@ -127,10 +128,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 40,
-        "branches": 35,
-        "functions": 40,
-        "lines": 40
+        "statements": 70,
+        "branches": 60,
+        "functions": 70,
+        "lines": 70
       }
     },
     "coverageReporters": [

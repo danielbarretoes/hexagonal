@@ -1,17 +1,23 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { getAppConfig } from '../../../../config/env/app-config';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { writeStructuredLog } from '../../../../common/observability/logging/structured-log.util';
 import { OutboxRelayService } from '../../application/outbox-relay.service';
+import {
+  JOBS_RUNTIME_OPTIONS,
+  type JobsRuntimeOptions,
+} from '../../application/ports/jobs-runtime-options.token';
 
 @Injectable()
 export class OutboxRelayWorker implements OnModuleDestroy {
-  private readonly jobsConfig = getAppConfig().jobs;
   private running = true;
 
-  constructor(private readonly outboxRelayService: OutboxRelayService) {}
+  constructor(
+    private readonly outboxRelayService: OutboxRelayService,
+    @Inject(JOBS_RUNTIME_OPTIONS)
+    private readonly jobsRuntimeOptions: JobsRuntimeOptions,
+  ) {}
 
   async start(): Promise<void> {
-    if (!this.jobsConfig.enabled) {
+    if (!this.jobsRuntimeOptions.enabled) {
       writeStructuredLog('log', OutboxRelayWorker.name, 'Outbox relay disabled', {
         event: 'jobs.outbox.disabled',
       });
@@ -20,17 +26,17 @@ export class OutboxRelayWorker implements OnModuleDestroy {
 
     writeStructuredLog('log', OutboxRelayWorker.name, 'Outbox relay started', {
       event: 'jobs.outbox.started',
-      batchSize: this.jobsConfig.outboxBatchSize,
-      pollIntervalMs: this.jobsConfig.outboxPollIntervalMs,
+      batchSize: this.jobsRuntimeOptions.outboxBatchSize,
+      pollIntervalMs: this.jobsRuntimeOptions.outboxPollIntervalMs,
     });
 
     while (this.running) {
       const claimedJobIds = await this.outboxRelayService.claimPendingBatch(
-        this.jobsConfig.outboxBatchSize,
+        this.jobsRuntimeOptions.outboxBatchSize,
       );
 
       if (claimedJobIds.length === 0) {
-        await this.sleep(this.jobsConfig.outboxPollIntervalMs);
+        await this.sleep(this.jobsRuntimeOptions.outboxPollIntervalMs);
         continue;
       }
 

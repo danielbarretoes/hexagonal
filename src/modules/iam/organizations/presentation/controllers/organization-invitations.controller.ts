@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Inject, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -21,7 +21,10 @@ import { CurrentUser } from '../../../../../common/http/decorators/current-user.
 import { Idempotent } from '../../../../../common/http/decorators/idempotent.decorator';
 import { TenantScoped } from '../../../../../common/http/decorators/tenant-scoped.decorator';
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
-import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
+import {
+  AUTH_RUNTIME_OPTIONS,
+  type AuthRuntimeOptions,
+} from '../../../auth/application/ports/auth-runtime-options.token';
 
 @ApiTags('Organization Invitations')
 @Controller({ path: 'organization-invitations', version: '1' })
@@ -29,6 +32,8 @@ export class OrganizationInvitationsController {
   constructor(
     private readonly createOrganizationInvitationUseCase: CreateOrganizationInvitationUseCase,
     private readonly acceptOrganizationInvitationUseCase: AcceptOrganizationInvitationUseCase,
+    @Inject(AUTH_RUNTIME_OPTIONS)
+    private readonly authRuntimeOptions: AuthRuntimeOptions,
   ) {}
 
   @Post()
@@ -51,7 +56,7 @@ export class OrganizationInvitationsController {
       roleCode: body.roleCode,
     });
 
-    return getAuthRuntimeConfig().exposePrivateTokens ? response : {};
+    return this.authRuntimeOptions.exposePrivateTokens ? response : {};
   }
 
   @Post('accept')

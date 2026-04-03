@@ -38,6 +38,22 @@ function getContext(filePath: string): string | null {
   return match ? match[1] : null;
 }
 
+function normalizeFilePath(filePath: string): string {
+  return filePath.replaceAll('\\', '/');
+}
+
+function isRuntimeConfigBoundaryFile(filePath: string): boolean {
+  const normalizedPath = normalizeFilePath(filePath);
+
+  return (
+    normalizedPath.includes('/src/config/') ||
+    normalizedPath.endsWith('.module.ts') ||
+    normalizedPath.endsWith('/src/main.ts') ||
+    normalizedPath.endsWith('/src/app.setup.ts') ||
+    /^.*\/src\/jobs(?:\.[^.]+)?\.ts$/.test(normalizedPath)
+  );
+}
+
 function isAccessOrSupportModule(filePath: string): boolean {
   const baseName = path.basename(filePath);
   return baseName.endsWith('-access.module.ts') || baseName === 'auth-support.module.ts';
@@ -91,7 +107,7 @@ function resolveRelativeImports(filePath: string): string[] {
 
 describe('hexagonal architecture', () => {
   it('does not allow layer files to depend on *.module.ts files', () => {
-    const moduleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src/modules'));
+    const moduleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src'));
 
     const offenders = moduleFiles.flatMap((filePath) => {
       const sourceLayer = getLayer(filePath);
@@ -121,7 +137,7 @@ describe('hexagonal architecture', () => {
       presentation: 4,
     };
 
-    const moduleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src/modules'));
+    const moduleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src'));
 
     const offenders = moduleFiles.flatMap((filePath) => {
       const sourceLayer = getLayer(filePath);
@@ -318,6 +334,48 @@ describe('hexagonal architecture', () => {
 
       return content.includes('@TenantScoped()') ? [] : [filePath];
     });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('does not allow runtime config reads outside config files, entrypoints, or composition modules', () => {
+    const sourceFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src')).filter(
+      (filePath) => !isRuntimeConfigBoundaryFile(filePath),
+    );
+
+    const offenders = sourceFiles.flatMap((filePath) => {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const configReads = [
+        'process.env',
+        'getAppConfig(',
+        'getAuthRuntimeConfig(',
+        'getJwtConfig(',
+      ].filter((pattern) => content.includes(pattern));
+
+      const configImports = resolveRelativeImports(filePath).filter((resolvedImport) =>
+        normalizeFilePath(resolvedImport).includes('/src/config/'),
+      );
+
+      return [
+        ...configReads.map((pattern) => `${filePath} -> ${pattern}`),
+        ...configImports.map((resolvedImport) => `${filePath} -> ${resolvedImport}`),
+      ];
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('does not allow access modules to compose full feature modules', () => {
+    const accessModuleFiles = collectTypeScriptFiles(path.join(process.cwd(), 'src')).filter(
+      (filePath) => filePath.endsWith('-access.module.ts'),
+    );
+
+    const offenders = accessModuleFiles.flatMap((filePath) =>
+      resolveRelativeImports(filePath)
+        .filter((resolvedImport) => resolvedImport.endsWith('.module.ts'))
+        .filter((resolvedImport) => !isAccessOrSupportModule(resolvedImport))
+        .map((resolvedImport) => `${filePath} -> ${resolvedImport}`),
+    );
 
     expect(offenders).toEqual([]);
   });

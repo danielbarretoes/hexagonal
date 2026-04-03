@@ -1,19 +1,16 @@
 import { FetchWebhookDeliveryClientAdapter } from './fetch-webhook-delivery-client.adapter';
 
 describe('FetchWebhookDeliveryClientAdapter', () => {
-  const originalEnv = { ...process.env };
   const originalFetch = global.fetch;
-
-  beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      NODE_ENV: 'test',
-      WEBHOOKS_TIMEOUT_MS: '1000',
-    };
-  });
+  const runtimeOptions = {
+    enabled: true,
+    timeoutMs: 1000,
+    secretEncryptionKey: 'your-webhook-secret-change-in-production-minimum-32-characters',
+    requireHttps: true,
+    allowPrivateTargets: false,
+  } as const;
 
   afterEach(() => {
-    process.env = originalEnv;
     global.fetch = originalFetch;
   });
 
@@ -22,7 +19,7 @@ describe('FetchWebhookDeliveryClientAdapter', () => {
       status: 202,
     }) as never;
 
-    const adapter = new FetchWebhookDeliveryClientAdapter();
+    const adapter = new FetchWebhookDeliveryClientAdapter(runtimeOptions);
     const result = await adapter.deliver({
       url: 'https://example.com/webhooks',
       secret: 'whsec_test',
@@ -53,7 +50,7 @@ describe('FetchWebhookDeliveryClientAdapter', () => {
       status: 503,
     }) as never;
 
-    const adapter = new FetchWebhookDeliveryClientAdapter();
+    const adapter = new FetchWebhookDeliveryClientAdapter(runtimeOptions);
 
     await expect(
       adapter.deliver({
@@ -75,7 +72,7 @@ describe('FetchWebhookDeliveryClientAdapter', () => {
       status: 422,
     }) as never;
 
-    const adapter = new FetchWebhookDeliveryClientAdapter();
+    const adapter = new FetchWebhookDeliveryClientAdapter(runtimeOptions);
 
     await expect(
       adapter.deliver({
@@ -93,11 +90,9 @@ describe('FetchWebhookDeliveryClientAdapter', () => {
   });
 
   it('rejects private targets when private delivery targets are disabled', async () => {
-    process.env.WEBHOOKS_ALLOW_PRIVATE_TARGETS = 'false';
-    process.env.WEBHOOKS_REQUIRE_HTTPS = 'true';
     global.fetch = jest.fn() as never;
 
-    const adapter = new FetchWebhookDeliveryClientAdapter();
+    const adapter = new FetchWebhookDeliveryClientAdapter(runtimeOptions);
 
     await expect(
       adapter.deliver({

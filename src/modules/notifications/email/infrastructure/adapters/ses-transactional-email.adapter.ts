@@ -1,22 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { SendEmailCommand, type SESv2Client } from '@aws-sdk/client-sesv2';
-import { getAppConfig } from '../../../../../config/env/app-config';
 import { writeStructuredLog } from '../../../../../common/observability/logging/structured-log.util';
 import type {
   TransactionalEmailMessage,
   TransactionalEmailPort,
 } from '../../../../../shared/domain/ports/transactional-email.port';
+import { EMAIL_RUNTIME_OPTIONS, type EmailRuntimeOptions } from '../../email-runtime-options.token';
 import { SES_CLIENT } from '../aws/ses-client.token';
 import { TransactionalEmailTemplateFactory } from '../templates/transactional-email-template.factory';
 
 @Injectable()
 export class SesTransactionalEmailAdapter implements TransactionalEmailPort {
-  private readonly emailConfig = getAppConfig().email;
-
   constructor(
     @Inject(SES_CLIENT)
     private readonly sesClient: Pick<SESv2Client, 'send'>,
     private readonly templateFactory: TransactionalEmailTemplateFactory,
+    @Inject(EMAIL_RUNTIME_OPTIONS)
+    private readonly emailRuntimeOptions: EmailRuntimeOptions,
   ) {}
 
   async send(message: TransactionalEmailMessage): Promise<void> {
@@ -25,7 +25,7 @@ export class SesTransactionalEmailAdapter implements TransactionalEmailPort {
     try {
       await this.sesClient.send(
         new SendEmailCommand({
-          FromEmailAddress: `${this.emailConfig.fromName} <${this.emailConfig.fromEmail}>`,
+          FromEmailAddress: `${this.emailRuntimeOptions.fromName} <${this.emailRuntimeOptions.fromEmail}>`,
           Destination: {
             ToAddresses: [message.to],
           },
@@ -53,7 +53,7 @@ export class SesTransactionalEmailAdapter implements TransactionalEmailPort {
       writeStructuredLog('error', SesTransactionalEmailAdapter.name, 'SES delivery failed', {
         event: 'email.delivery.failed',
         emailType: message.type,
-        provider: this.emailConfig.provider,
+        provider: this.emailRuntimeOptions.provider,
         errorMessage: error instanceof Error ? error.message : 'Unknown SES error',
       });
       throw error;

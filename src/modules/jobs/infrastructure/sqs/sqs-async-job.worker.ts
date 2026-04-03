@@ -5,19 +5,21 @@ import {
   type Message,
   type SQSClient,
 } from '@aws-sdk/client-sqs';
-import { getAppConfig } from '../../../../config/env/app-config';
 import { writeStructuredLog } from '../../../../common/observability/logging/structured-log.util';
 import type { AsyncJobEnvelope } from '../../../../shared/domain/ports/async-job-dispatcher.port';
 import { NonRetryableJobError } from '../../application/errors/non-retryable-job.error';
 import { JOB_OUTBOX_REPOSITORY_TOKEN } from '../../application/ports/job-outbox-repository.token';
 import { ASYNC_JOB_PROCESSOR_PORT } from '../../application/ports/async-job-processor.token';
 import type { AsyncJobProcessorPort } from '../../application/ports/async-job-processor.port';
+import {
+  JOBS_RUNTIME_OPTIONS,
+  type JobsRuntimeOptions,
+} from '../../application/ports/jobs-runtime-options.token';
 import type { JobOutboxRepositoryPort } from '../../domain/ports/job-outbox.repository.port';
 import { SQS_CLIENT } from '../aws/sqs-client.token';
 
 @Injectable()
 export class SqsAsyncJobWorker implements OnModuleDestroy {
-  private readonly jobsConfig = getAppConfig().jobs;
   private running = true;
 
   constructor(
@@ -27,10 +29,12 @@ export class SqsAsyncJobWorker implements OnModuleDestroy {
     private readonly asyncJobProcessor: AsyncJobProcessorPort,
     @Inject(JOB_OUTBOX_REPOSITORY_TOKEN)
     private readonly jobOutboxRepository: JobOutboxRepositoryPort,
+    @Inject(JOBS_RUNTIME_OPTIONS)
+    private readonly jobsRuntimeOptions: JobsRuntimeOptions,
   ) {}
 
   async start(): Promise<void> {
-    if (!this.jobsConfig.enabled) {
+    if (!this.jobsRuntimeOptions.enabled) {
       writeStructuredLog('log', SqsAsyncJobWorker.name, 'Async jobs disabled', {
         event: 'jobs.worker.disabled',
       });
@@ -39,18 +43,18 @@ export class SqsAsyncJobWorker implements OnModuleDestroy {
 
     writeStructuredLog('log', SqsAsyncJobWorker.name, 'Async job worker started', {
       event: 'jobs.worker.started',
-      queueUrl: this.jobsConfig.sqsQueueUrl,
-      maxMessages: this.jobsConfig.maxMessages,
+      queueUrl: this.jobsRuntimeOptions.sqsQueueUrl,
+      maxMessages: this.jobsRuntimeOptions.maxMessages,
     });
 
     while (this.running) {
       try {
         const response = await this.sqsClient.send(
           new ReceiveMessageCommand({
-            QueueUrl: this.jobsConfig.sqsQueueUrl,
-            MaxNumberOfMessages: this.jobsConfig.maxMessages,
-            WaitTimeSeconds: this.jobsConfig.waitTimeSeconds,
-            VisibilityTimeout: this.jobsConfig.visibilityTimeoutSeconds,
+            QueueUrl: this.jobsRuntimeOptions.sqsQueueUrl,
+            MaxNumberOfMessages: this.jobsRuntimeOptions.maxMessages,
+            WaitTimeSeconds: this.jobsRuntimeOptions.waitTimeSeconds,
+            VisibilityTimeout: this.jobsRuntimeOptions.visibilityTimeoutSeconds,
           }),
         );
 
@@ -93,7 +97,7 @@ export class SqsAsyncJobWorker implements OnModuleDestroy {
       await this.asyncJobProcessor.process(envelope);
       await this.sqsClient.send(
         new DeleteMessageCommand({
-          QueueUrl: this.jobsConfig.sqsQueueUrl,
+          QueueUrl: this.jobsRuntimeOptions.sqsQueueUrl,
           ReceiptHandle: message.ReceiptHandle,
         }),
       );
@@ -107,7 +111,7 @@ export class SqsAsyncJobWorker implements OnModuleDestroy {
 
         await this.sqsClient.send(
           new DeleteMessageCommand({
-            QueueUrl: this.jobsConfig.sqsQueueUrl,
+            QueueUrl: this.jobsRuntimeOptions.sqsQueueUrl,
             ReceiptHandle: message.ReceiptHandle,
           }),
         );

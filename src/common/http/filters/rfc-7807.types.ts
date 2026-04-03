@@ -37,6 +37,3 @@ export interface ValidationProblemDetail extends ProblemDetail {
 export function createErrorType(baseUrl: string, code: string): string {
   return `${baseUrl}/errors/${code}`;
 }
-
-/** Default error type base URL */
-export const ERROR_TYPE_BASE_URL = process.env.API_BASE_URL || 'https://api.hexagonal.com';

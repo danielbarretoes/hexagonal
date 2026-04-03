@@ -2,7 +2,7 @@
  * Auth controller.
  */
 
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Inject, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { LogoutAllSessionsUseCase } from '../../application/use-cases/logout-all-sessions.use-case';
@@ -26,8 +26,11 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { CurrentUser } from '../../../../../common/http/decorators/current-user.decorator';
 import { Idempotent } from '../../../../../common/http/decorators/idempotent.decorator';
 import type { AuthenticatedUserPayload } from '../../../../../common/http/authenticated-request';
-import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
 import { Throttle } from '@nestjs/throttler';
+import {
+  AUTH_RUNTIME_OPTIONS,
+  type AuthRuntimeOptions,
+} from '../../application/ports/auth-runtime-options.token';
 
 @ApiTags('Auth')
 @UseGuards(AuthRateLimitGuard)
@@ -42,6 +45,8 @@ export class AuthController {
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly requestEmailVerificationUseCase: RequestEmailVerificationUseCase,
     private readonly verifyEmailUseCase: VerifyEmailUseCase,
+    @Inject(AUTH_RUNTIME_OPTIONS)
+    private readonly authRuntimeOptions: AuthRuntimeOptions,
   ) {}
 
   @Post('login')
@@ -112,7 +117,7 @@ export class AuthController {
   async requestPasswordReset(@Body() body: RequestPasswordResetDto) {
     const response = await this.requestPasswordResetUseCase.execute(body.email);
 
-    return getAuthRuntimeConfig().exposePrivateTokens && response ? response : {};
+    return this.authRuntimeOptions.exposePrivateTokens && response ? response : {};
   }
 
   @Post('password-reset/confirm')
@@ -135,7 +140,7 @@ export class AuthController {
   async requestEmailVerification(@CurrentUser() user: AuthenticatedUserPayload) {
     const response = await this.requestEmailVerificationUseCase.execute(user.userId);
 
-    return getAuthRuntimeConfig().exposePrivateTokens ? response : {};
+    return this.authRuntimeOptions.exposePrivateTokens ? response : {};
   }
 
   @Post('email-verification/confirm')

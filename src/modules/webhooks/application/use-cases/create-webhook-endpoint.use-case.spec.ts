@@ -2,30 +2,24 @@ import { CreateWebhookEndpointUseCase } from './create-webhook-endpoint.use-case
 import { InvalidWebhookTargetException } from '../../domain/errors/invalid-webhook-target.exception';
 
 describe('CreateWebhookEndpointUseCase', () => {
-  const originalEnv = { ...process.env };
   const create = jest.fn();
   const encrypt = jest.fn();
   const record = jest.fn();
   const passthroughEndpoint = async <T extends Record<string, unknown>>(endpoint: T): Promise<T> =>
     endpoint;
+  const runtimeOptions = {
+    enabled: true,
+    timeoutMs: 1000,
+    secretEncryptionKey: 'your-webhook-secret-change-in-production-minimum-32-characters',
+    requireHttps: true,
+    allowPrivateTargets: false,
+  } as const;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env = {
-      ...originalEnv,
-      NODE_ENV: 'test',
-      WEBHOOKS_REQUIRE_HTTPS: 'true',
-      WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'false',
-      WEBHOOKS_SECRET_ENCRYPTION_KEY:
-        'your-webhook-secret-change-in-production-minimum-32-characters',
-    };
     create.mockImplementation(passthroughEndpoint);
     encrypt.mockReturnValue('ciphertext');
     record.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
   });
 
   it('rejects private webhook targets before persisting them', async () => {
@@ -33,6 +27,7 @@ describe('CreateWebhookEndpointUseCase', () => {
       { create } as never,
       { encrypt } as never,
       { record } as never,
+      runtimeOptions,
     );
 
     await expect(
@@ -53,6 +48,7 @@ describe('CreateWebhookEndpointUseCase', () => {
       { create } as never,
       { encrypt } as never,
       { record } as never,
+      runtimeOptions,
     );
 
     await useCase.execute({

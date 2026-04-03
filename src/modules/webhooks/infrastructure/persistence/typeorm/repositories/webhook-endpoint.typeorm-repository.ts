@@ -1,6 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { DataSource, Repository } from 'typeorm';
+import {
+  TYPEORM_RLS_RUNTIME_OPTIONS,
+  type TypeormRlsRuntimeOptions,
+} from '../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls-runtime-options.token';
 import { Paginated } from '../../../../../../shared/domain/primitives/paginated';
 import { TenantContextRequiredException } from '../../../../../../shared/domain/exceptions';
 import { TypeormTransactionContext } from '../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-transaction.context';
@@ -9,13 +13,13 @@ import type { WebhookEndpointRepositoryPort } from '../../../../domain/ports/web
 import { WebhookEndpointMapper } from '../mappers/webhook-endpoint.mapper';
 import { WebhookEndpointTypeOrmEntity } from '../entities/webhook-endpoint.entity';
 
-const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
-
 @Injectable()
 export class WebhookEndpointTypeOrmRepository implements WebhookEndpointRepositoryPort {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    @Inject(TYPEORM_RLS_RUNTIME_OPTIONS)
+    private readonly typeormRlsRuntimeOptions: TypeormRlsRuntimeOptions,
   ) {}
 
   async findById(id: string, organizationId: string): Promise<WebhookEndpoint | null> {
@@ -101,7 +105,7 @@ export class WebhookEndpointTypeOrmRepository implements WebhookEndpointReposito
     const activeManager = TypeormTransactionContext.getManager();
 
     if (activeManager) {
-      await activeManager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await activeManager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await activeManager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
         organizationId,
       ]);
@@ -110,7 +114,7 @@ export class WebhookEndpointTypeOrmRepository implements WebhookEndpointReposito
     }
 
     return this.dataSource.transaction(async (manager) => {
-      await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await manager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await manager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
         organizationId,
       ]);

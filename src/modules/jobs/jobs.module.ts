@@ -17,31 +17,20 @@ import { OutboxCleanupWorker } from './infrastructure/outbox/outbox-cleanup.work
 import { OutboxRelayWorker } from './infrastructure/outbox/outbox-relay.worker';
 import { JobsRuntimeHealthService } from './infrastructure/runtime/jobs-runtime-health.service';
 import { SqsAsyncJobWorker } from './infrastructure/sqs/sqs-async-job.worker';
-import { getAppConfig } from '../../config/env/app-config';
+import type { JobsRuntimeOptions } from './application/ports/jobs-runtime-options.token';
 
 @Module({
   imports: [JobsAccessModule, EmailAccessModule, WebhooksAccessModule],
   providers: [
     { provide: ASYNC_JOB_PROCESSOR_PORT, useExisting: AsyncJobProcessorService },
     {
-      provide: JOBS_RUNTIME_OPTIONS,
-      useValue: {
-        outboxMaxAttempts: getAppConfig().jobs.outboxMaxAttempts,
-        outboxRetryBaseMs: getAppConfig().jobs.outboxRetryBaseMs,
-        outboxRetryMaxMs: getAppConfig().jobs.outboxRetryMaxMs,
-        outboxCleanupBatchSize: getAppConfig().jobs.outboxCleanupBatchSize,
-        outboxRetentionPublishedHours: getAppConfig().jobs.outboxRetentionPublishedHours,
-        outboxRetentionCompletedHours: getAppConfig().jobs.outboxRetentionCompletedHours,
-        outboxRetentionDeadHours: getAppConfig().jobs.outboxRetentionDeadHours,
-      },
-    },
-    {
       provide: JOB_HANDLERS,
       useFactory: (
+        _jobsRuntimeOptions: JobsRuntimeOptions,
         transactionalEmailJobHandler: TransactionalEmailJobHandler,
         webhookDeliveryJobHandler: WebhookDeliveryJobHandler,
       ) => [transactionalEmailJobHandler, webhookDeliveryJobHandler],
-      inject: [TransactionalEmailJobHandler, WebhookDeliveryJobHandler],
+      inject: [JOBS_RUNTIME_OPTIONS, TransactionalEmailJobHandler, WebhookDeliveryJobHandler],
     },
     AsyncJobProcessorService,
     OutboxCleanupService,

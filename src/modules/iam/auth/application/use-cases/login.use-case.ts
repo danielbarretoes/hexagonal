@@ -12,10 +12,10 @@ import type { JwtTokenPort } from '../../domain/ports';
 import type { PasswordHasherPort } from '../../../shared/domain/ports/password-hasher.port';
 import { InvalidCredentialsException } from '../../../shared/domain/exceptions';
 import { AUTH_SESSION_REPOSITORY_TOKEN } from '../ports/auth-session-repository.token';
+import { AUTH_RUNTIME_OPTIONS, type AuthRuntimeOptions } from '../ports/auth-runtime-options.token';
 import type { AuthSessionRepositoryPort } from '../../domain/ports/auth-session.repository.port';
 import { createOpaqueToken } from '../../../../../shared/domain/security/opaque-token';
 import { RefreshSessionUseCase } from './refresh-session.use-case';
-import { getAuthRuntimeConfig } from '../../../../../config/auth/auth-runtime.config';
 
 export interface LoginCommand {
   email: string;
@@ -40,6 +40,8 @@ export class LoginUseCase {
     private readonly passwordHasher: PasswordHasherPort,
     @Inject(AUTH_SESSION_REPOSITORY_TOKEN)
     private readonly authSessionRepository: AuthSessionRepositoryPort,
+    @Inject(AUTH_RUNTIME_OPTIONS)
+    private readonly authRuntimeOptions: AuthRuntimeOptions,
   ) {}
 
   async execute(command: LoginCommand): Promise<LoginResponse> {
@@ -61,7 +63,7 @@ export class LoginUseCase {
       opaqueRefreshToken.id,
       user.id,
       refreshTokenHash,
-      getAuthRuntimeConfig().refreshSessionTtlMs,
+      this.authRuntimeOptions.refreshSessionTtlMs,
     );
     await this.authSessionRepository.create(session);
 

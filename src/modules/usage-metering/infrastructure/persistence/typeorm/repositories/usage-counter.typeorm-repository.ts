@@ -1,15 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import type { DataSource } from 'typeorm';
+import {
+  TYPEORM_RLS_RUNTIME_OPTIONS,
+  type TypeormRlsRuntimeOptions,
+} from '../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls-runtime-options.token';
 import type {
   ApiKeyUsageSummary,
   UsageCounter,
 } from '../../../../domain/entities/usage-counter.entity';
 import type { UsageCounterRepositoryPort } from '../../../../domain/ports/usage-counter.repository.port';
 import { TypeormTransactionContext } from '../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-transaction.context';
-
-const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
 
 interface ApiKeyUsageSummaryRow {
   apiKeyId: string;
@@ -42,6 +44,8 @@ export class UsageCounterTypeOrmRepository implements UsageCounterRepositoryPort
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    @Inject(TYPEORM_RLS_RUNTIME_OPTIONS)
+    private readonly typeormRlsRuntimeOptions: TypeormRlsRuntimeOptions,
   ) {}
 
   async increment(counter: UsageCounter): Promise<void> {
@@ -141,7 +145,7 @@ export class UsageCounterTypeOrmRepository implements UsageCounterRepositoryPort
     const activeManager = TypeormTransactionContext.getManager();
 
     if (activeManager) {
-      await activeManager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await activeManager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await activeManager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
         organizationId,
       ]);
@@ -150,7 +154,7 @@ export class UsageCounterTypeOrmRepository implements UsageCounterRepositoryPort
     }
 
     return this.dataSource.transaction(async (manager) => {
-      await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await manager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await manager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
         organizationId,
       ]);

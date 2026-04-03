@@ -43,6 +43,34 @@ function getContext(filePath) {
   return match ? match[1] : null;
 }
 
+function normalizeFilePath(filePath) {
+  return filePath.replaceAll('\\', '/');
+}
+
+function isModuleCompositionFile(filePath) {
+  return normalizeFilePath(filePath).endsWith('.module.ts');
+}
+
+function isEntryPointFile(filePath) {
+  const normalizedPath = normalizeFilePath(filePath);
+
+  return (
+    normalizedPath.endsWith('/src/main.ts') ||
+    normalizedPath.endsWith('/src/app.setup.ts') ||
+    /^.*\/src\/jobs(?:\.[^.]+)?\.ts$/.test(normalizedPath)
+  );
+}
+
+function isRuntimeConfigBoundaryFile(filePath) {
+  const normalizedPath = normalizeFilePath(filePath);
+
+  return (
+    normalizedPath.includes('/src/config/') ||
+    isModuleCompositionFile(normalizedPath) ||
+    isEntryPointFile(normalizedPath)
+  );
+}
+
 /**
  * Checks if a file represents a port interface.
  * Ports are interfaces ending with 'Port' that define boundaries between modules.
@@ -91,8 +119,8 @@ function createHexagonalRule() {
       const sourceScope = getScope(filename);
       const sourceContext = getContext(filename);
 
-      // Skip files not in the modules directory
-      if (!filename.includes('/modules/')) {
+      // Skip files outside the source tree
+      if (!filename.includes('/src/')) {
         return {};
       }
 
@@ -235,6 +263,128 @@ function createHexagonalRule() {
   };
 }
 
+function createRuntimeConfigBoundaryRule() {
+  return {
+    meta: {
+      name: 'runtime-config-boundary',
+      schema: [],
+    },
+    create(context) {
+      const filename = context.filename || '';
+
+      if (
+        !filename.includes('/src/') ||
+        filename.endsWith('.spec.ts') ||
+        filename.endsWith('.e2e-spec.ts') ||
+        isRuntimeConfigBoundaryFile(filename)
+      ) {
+        return {};
+      }
+
+      return {
+        ImportDeclaration(node) {
+          const importPath = node.source.value;
+
+          if (typeof importPath !== 'string' || !importPath.startsWith('.')) {
+            return;
+          }
+
+          const currentDir = path.dirname(filename);
+          const importPathAbs = path.resolve(currentDir, importPath);
+          const importRelative = path.relative(process.cwd(), importPathAbs).replaceAll('\\', '/');
+
+          if (importRelative.startsWith('src/config/')) {
+            context.report({
+              node,
+              message:
+                "[Hexagonal] Runtime config may only be imported from 'src/config' inside config files, entrypoints, or composition modules.",
+            });
+          }
+        },
+        CallExpression(node) {
+          if (node.callee.type !== 'Identifier') {
+            return;
+          }
+
+          if (
+            node.callee.name === 'getAppConfig' ||
+            node.callee.name === 'getAuthRuntimeConfig' ||
+            node.callee.name === 'getJwtConfig'
+          ) {
+            context.report({
+              node,
+              message:
+                '[Hexagonal] Runtime config access must stay in config files, entrypoints, or composition modules.',
+            });
+          }
+        },
+        MemberExpression(node) {
+          if (
+            node.object.type === 'Identifier' &&
+            node.object.name === 'process' &&
+            node.property.type === 'Identifier' &&
+            node.property.name === 'env'
+          ) {
+            context.report({
+              node,
+              message:
+                '[Hexagonal] process.env is restricted to config files, entrypoints, or composition modules.',
+            });
+          }
+        },
+      };
+    },
+  };
+}
+
+function createAccessModuleRule() {
+  return {
+    meta: {
+      name: 'access-module-boundary',
+      schema: [],
+    },
+    create(context) {
+      const filename = context.filename || '';
+
+      if (!normalizeFilePath(filename).endsWith('-access.module.ts')) {
+        return {};
+      }
+
+      return {
+        ImportDeclaration(node) {
+          const importPath = node.source.value;
+
+          if (typeof importPath !== 'string' || !importPath.startsWith('.')) {
+            return;
+          }
+
+          const currentDir = path.dirname(filename);
+          const importPathAbs = path.resolve(currentDir, importPath);
+          const importRelative = path.relative(process.cwd(), importPathAbs).replaceAll('\\', '/');
+          const targetBaseName = path.basename(importRelative);
+
+          if (!importRelative.endsWith('.module.ts')) {
+            return;
+          }
+
+          if (
+            targetBaseName.endsWith('-access.module.ts') ||
+            targetBaseName === 'auth-support.module.ts'
+          ) {
+            return;
+          }
+
+          context.report({
+            node,
+            message:
+              "[Hexagonal] '*-access.module.ts' files may only compose other access/support modules, never full feature modules.",
+          });
+        },
+      };
+    },
+  };
+}
+
 export default tseslint.config(
   {
     ignores: ['eslint.config.mjs', 'dist/**', 'node_modules/**'],
@@ -287,11 +437,15 @@ export default tseslint.config(
       hexagonal: {
         rules: {
           'layer-dependency': createHexagonalRule(),
+          'runtime-config-boundary': createRuntimeConfigBoundaryRule(),
+          'access-module-boundary': createAccessModuleRule(),
         },
       },
     },
     rules: {
       'hexagonal/layer-dependency': 'error',
+      'hexagonal/runtime-config-boundary': 'error',
+      'hexagonal/access-module-boundary': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',

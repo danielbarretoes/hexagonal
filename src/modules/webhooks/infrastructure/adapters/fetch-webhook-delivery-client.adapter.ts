@@ -1,6 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
-import { getAppConfig } from '../../../../config/env/app-config';
 import type {
   DeliverWebhookCommand,
   WebhookDeliveryClientPort,
@@ -8,6 +7,10 @@ import type {
 } from '../../domain/ports/webhook-delivery-client.port';
 import { NonRetryableWebhookDeliveryError } from '../../domain/errors/non-retryable-webhook-delivery.error';
 import { assertWebhookTargetAllowed } from '../../domain/webhook-target-policy';
+import {
+  WEBHOOKS_RUNTIME_OPTIONS,
+  type WebhooksRuntimeOptions,
+} from '../../application/ports/webhooks-runtime-options.token';
 
 class RetryableWebhookDeliveryError extends Error {
   constructor(
@@ -20,14 +23,18 @@ class RetryableWebhookDeliveryError extends Error {
 
 @Injectable()
 export class FetchWebhookDeliveryClientAdapter implements WebhookDeliveryClientPort {
+  constructor(
+    @Inject(WEBHOOKS_RUNTIME_OPTIONS)
+    private readonly webhooksRuntimeOptions: WebhooksRuntimeOptions,
+  ) {}
+
   async deliver(command: DeliverWebhookCommand): Promise<WebhookDeliveryResult> {
-    const webhookConfig = getAppConfig().webhooks;
     let targetUrl: string;
 
     try {
       targetUrl = assertWebhookTargetAllowed(command.url, {
-        requireHttps: webhookConfig.requireHttps,
-        allowPrivateTargets: webhookConfig.allowPrivateTargets,
+        requireHttps: this.webhooksRuntimeOptions.requireHttps,
+        allowPrivateTargets: this.webhooksRuntimeOptions.allowPrivateTargets,
       }).toString();
     } catch (error) {
       throw new NonRetryableWebhookDeliveryError(
@@ -58,7 +65,7 @@ export class FetchWebhookDeliveryClientAdapter implements WebhookDeliveryClientP
         'x-webhook-signature': `t=${timestamp},v1=${signature}`,
       },
       body,
-      signal: AbortSignal.timeout(getAppConfig().webhooks.timeoutMs),
+      signal: AbortSignal.timeout(this.webhooksRuntimeOptions.timeoutMs),
     }).catch((error: Error) => {
       throw new RetryableWebhookDeliveryError(error.message);
     });

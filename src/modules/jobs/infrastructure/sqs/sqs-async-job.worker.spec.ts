@@ -3,23 +3,33 @@ import { NonRetryableJobError } from '../../application/errors/non-retryable-job
 import { SqsAsyncJobWorker } from './sqs-async-job.worker';
 
 describe('SqsAsyncJobWorker', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-  const originalJobsEnabled = process.env.JOBS_ENABLED;
-  const originalJobsQueueUrl = process.env.JOBS_SQS_QUEUE_URL;
+  const runtimeOptions = {
+    enabled: true,
+    sqsRegion: 'us-east-1',
+    sqsQueueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789012/hexagonal-jobs.fifo',
+    maxMessages: 5,
+    waitTimeSeconds: 10,
+    visibilityTimeoutSeconds: 30,
+    emailDeliveryMode: 'async',
+    outboxBatchSize: 25,
+    outboxPollIntervalMs: 1000,
+    outboxClaimTimeoutMs: 60000,
+    outboxCleanupEnabled: false,
+    outboxCleanupBatchSize: 200,
+    outboxCleanupIntervalMs: 900000,
+    outboxMaxAttempts: 8,
+    outboxRetryBaseMs: 1000,
+    outboxRetryMaxMs: 60000,
+    outboxRetentionPublishedHours: 720,
+    outboxRetentionCompletedHours: 720,
+    outboxRetentionDeadHours: 720,
+  } as const;
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.JOBS_ENABLED = originalJobsEnabled;
-    process.env.JOBS_SQS_QUEUE_URL = originalJobsQueueUrl;
     jest.restoreAllMocks();
   });
 
   it('deletes poison messages when the SQS envelope is malformed', async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.JOBS_ENABLED = 'true';
-    process.env.JOBS_SQS_QUEUE_URL =
-      'https://sqs.us-east-1.amazonaws.com/123456789012/hexagonal-jobs.fifo';
-
     const send = jest.fn().mockResolvedValue(undefined);
     const processEnvelope = jest.fn();
     const findById = jest.fn();
@@ -28,6 +38,7 @@ describe('SqsAsyncJobWorker', () => {
       { send } as never,
       { process: processEnvelope } as never,
       { findById, update } as never,
+      runtimeOptions,
     );
 
     await (
@@ -47,11 +58,6 @@ describe('SqsAsyncJobWorker', () => {
   });
 
   it('deletes poison messages when payload validation fails downstream as non-retryable', async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.JOBS_ENABLED = 'true';
-    process.env.JOBS_SQS_QUEUE_URL =
-      'https://sqs.us-east-1.amazonaws.com/123456789012/hexagonal-jobs.fifo';
-
     const send = jest.fn().mockResolvedValue(undefined);
     const processEnvelope = jest
       .fn()
@@ -62,6 +68,7 @@ describe('SqsAsyncJobWorker', () => {
       { send } as never,
       { process: processEnvelope } as never,
       { findById, update } as never,
+      runtimeOptions,
     );
 
     await (

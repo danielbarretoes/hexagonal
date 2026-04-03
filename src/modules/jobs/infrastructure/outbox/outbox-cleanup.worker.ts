@@ -1,17 +1,23 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { writeStructuredLog } from '../../../../common/observability/logging/structured-log.util';
-import { getAppConfig } from '../../../../config/env/app-config';
 import { OutboxCleanupService } from '../../application/outbox-cleanup.service';
+import {
+  JOBS_RUNTIME_OPTIONS,
+  type JobsRuntimeOptions,
+} from '../../application/ports/jobs-runtime-options.token';
 
 @Injectable()
 export class OutboxCleanupWorker implements OnModuleDestroy {
-  private readonly jobsConfig = getAppConfig().jobs;
   private running = true;
 
-  constructor(private readonly outboxCleanupService: OutboxCleanupService) {}
+  constructor(
+    private readonly outboxCleanupService: OutboxCleanupService,
+    @Inject(JOBS_RUNTIME_OPTIONS)
+    private readonly jobsRuntimeOptions: JobsRuntimeOptions,
+  ) {}
 
   async start(): Promise<void> {
-    if (!this.jobsConfig.outboxCleanupEnabled) {
+    if (!this.jobsRuntimeOptions.outboxCleanupEnabled) {
       writeStructuredLog('log', OutboxCleanupWorker.name, 'Outbox cleanup disabled', {
         event: 'jobs.outbox.cleanup.disabled',
       });
@@ -20,8 +26,8 @@ export class OutboxCleanupWorker implements OnModuleDestroy {
 
     writeStructuredLog('log', OutboxCleanupWorker.name, 'Outbox cleanup started', {
       event: 'jobs.outbox.cleanup.started',
-      batchSize: this.jobsConfig.outboxCleanupBatchSize,
-      intervalMs: this.jobsConfig.outboxCleanupIntervalMs,
+      batchSize: this.jobsRuntimeOptions.outboxCleanupBatchSize,
+      intervalMs: this.jobsRuntimeOptions.outboxCleanupIntervalMs,
     });
 
     while (this.running) {
@@ -45,7 +51,7 @@ export class OutboxCleanupWorker implements OnModuleDestroy {
         });
       }
 
-      await this.sleep(this.jobsConfig.outboxCleanupIntervalMs);
+      await this.sleep(this.jobsRuntimeOptions.outboxCleanupIntervalMs);
     }
 
     writeStructuredLog('log', OutboxCleanupWorker.name, 'Outbox cleanup stopped', {

@@ -3,7 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { getAppConfig } from '../../../config/env/app-config';
 import { OrganizationsAccessModule } from '../organizations/organizations-access.module';
 import { UsersAccessModule } from '../users/users-access.module';
-import { API_KEYS_RUNTIME_OPTIONS } from './application/ports/api-keys-runtime-options.token';
+import {
+  API_KEYS_RUNTIME_OPTIONS,
+  type ApiKeysRuntimeOptions,
+} from './application/ports/api-keys-runtime-options.token';
 import { AuthenticateApiKeyUseCase } from './application/use-cases/authenticate-api-key.use-case';
 import { API_KEY_AUTHENTICATOR_PORT } from './application/ports/api-key-authenticator.token';
 import { API_KEY_REPOSITORY_TOKEN } from './application/ports/api-key-repository.token';
@@ -21,11 +24,12 @@ import { ApiKeyTypeOrmRepository } from './infrastructure/persistence/typeorm/re
   providers: [
     {
       provide: API_KEYS_RUNTIME_OPTIONS,
-      useValue: {
+      useFactory: (): ApiKeysRuntimeOptions => ({
         nodeEnv: getAppConfig().nodeEnv,
         defaultTtlDays: getAppConfig().apiKeys.defaultTtlDays,
         usageWriteIntervalMs: getAppConfig().apiKeys.usageWriteIntervalMs,
-      },
+        secret: getAppConfig().apiKeys.secret,
+      }),
     },
     { provide: API_KEY_REPOSITORY_TOKEN, useClass: ApiKeyTypeOrmRepository },
     { provide: API_KEY_SECRET_HASHER_TOKEN, useClass: HmacApiKeySecretHasherAdapter },

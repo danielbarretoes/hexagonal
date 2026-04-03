@@ -173,4 +173,69 @@ describe('WebhookDeliveryJobHandler', () => {
       failed: true,
     });
   });
+
+  it('validates webhook delivery payloads and rejects malformed inputs', () => {
+    const handler = new WebhookDeliveryJobHandler(
+      { findById: findEndpointById, update: updateEndpoint } as never,
+      { decrypt } as never,
+      { deliver } as never,
+      { findByJobIdAndHandler, create } as never,
+      { findByIdForUpdate: findJobByIdForUpdate, update: updateJob } as never,
+      { runInTransaction } as never,
+    );
+
+    expect(
+      handler.validate({
+        eventId: 'event-1',
+        eventType: 'iam.member.added',
+        organizationId: 'org-1',
+        endpointId: 'endpoint-1',
+        occurredAt: '2026-04-01T00:00:00.000Z',
+        payload: { memberId: 'member-1' },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        endpointId: 'endpoint-1',
+      }),
+    );
+    expect(() => handler.validate(null)).toThrow('Invalid webhook delivery payload');
+    expect(() =>
+      handler.validate({
+        eventId: 'event-1',
+        payload: {},
+      }),
+    ).toThrow('Invalid webhook delivery payload');
+  });
+
+  it('fails when the webhook endpoint no longer exists', async () => {
+    findByJobIdAndHandler.mockResolvedValue(null);
+    findJobByIdForUpdate.mockResolvedValue({
+      id: 'job-2',
+      status: 'published',
+    });
+    findEndpointById.mockResolvedValue(null);
+
+    const handler = new WebhookDeliveryJobHandler(
+      { findById: findEndpointById, update: updateEndpoint } as never,
+      { decrypt } as never,
+      { deliver } as never,
+      { findByJobIdAndHandler, create } as never,
+      { findByIdForUpdate: findJobByIdForUpdate, update: updateJob } as never,
+      { runInTransaction } as never,
+    );
+
+    await expect(
+      handler.handle({
+        jobId: 'job-2',
+        payload: {
+          eventId: 'event-2',
+          eventType: 'iam.member.added',
+          organizationId: 'org-1',
+          endpointId: 'endpoint-2',
+          occurredAt: '2026-04-01T00:00:00.000Z',
+          payload: {},
+        },
+      }),
+    ).rejects.toThrow('Webhook endpoint not found');
+  });
 });

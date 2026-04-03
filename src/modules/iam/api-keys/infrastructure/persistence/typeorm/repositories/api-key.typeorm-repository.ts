@@ -1,6 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
+import {
+  TYPEORM_RLS_RUNTIME_OPTIONS,
+  type TypeormRlsRuntimeOptions,
+} from '../../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls-runtime-options.token';
 import { Paginated } from '../../../../../../../shared/domain/primitives/paginated';
 import { TenantContextRequiredException } from '../../../../../../../shared/domain/exceptions';
 import type {
@@ -11,8 +15,6 @@ import type { ApiKey } from '../../../../domain/entities/api-key.entity';
 import { ApiKeyMapper } from '../mappers/api-key.mapper';
 import { ApiKeyTypeOrmEntity } from '../entities/api-key.entity';
 
-const RLS_RUNTIME_ROLE = process.env.DB_RLS_RUNTIME_ROLE || 'hexagonal_app_runtime';
-
 @Injectable()
 export class ApiKeyTypeOrmRepository implements ApiKeyRepositoryPort {
   constructor(
@@ -20,11 +22,13 @@ export class ApiKeyTypeOrmRepository implements ApiKeyRepositoryPort {
     private readonly dataSource: DataSource,
     @InjectRepository(ApiKeyTypeOrmEntity)
     private readonly repository: Repository<ApiKeyTypeOrmEntity>,
+    @Inject(TYPEORM_RLS_RUNTIME_OPTIONS)
+    private readonly typeormRlsRuntimeOptions: TypeormRlsRuntimeOptions,
   ) {}
 
   async findById(id: string, options?: ApiKeyQueryOptions): Promise<ApiKey | null> {
     const entity = await this.dataSource.transaction(async (manager) => {
-      await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await manager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await manager.query(`SELECT set_config('app.current_api_key_id', $1, true)`, [id]);
 
       return manager.getRepository(ApiKeyTypeOrmEntity).findOne({
@@ -47,7 +51,7 @@ export class ApiKeyTypeOrmRepository implements ApiKeyRepositoryPort {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      await manager.query(`SET LOCAL ROLE ${RLS_RUNTIME_ROLE}`);
+      await manager.query(`SET LOCAL ROLE ${this.typeormRlsRuntimeOptions.runtimeRole}`);
       await manager.query(`SELECT set_config('app.current_organization_id', $1, true)`, [
         organizationId,
       ]);

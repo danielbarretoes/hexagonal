@@ -1,6 +1,6 @@
-# Hexagonal IAM Template
+# Modular SaaS Template
 
-Reusable NestJS IAM foundation built with a strict hexagonal style.
+Reusable NestJS SaaS starter built around a strict hexagonal core, provider-only access modules, and composition presets for optional capabilities.
 
 It currently includes:
 
@@ -24,6 +24,10 @@ It currently includes:
 - validated runtime configuration, health probes, graceful shutdown, and production HTTP hardening
 - transactional email through a shared port with Amazon SES plus optional durable async dispatch through the outbox + SQS path
 - structured JSON stdout logging with `traceId` correlation ready for ELK shippers
+- three composition presets:
+  - `CorePresetModule` for IAM core, tenant context, idempotency, tracing, health, and problem details runtime
+  - `OperationsPresetModule` for audit logs, HTTP logs, and usage metering
+  - `IntegrationsPresetModule` for email, jobs, and webhooks
 
 ## Project Map
 
@@ -32,6 +36,10 @@ src/
 ├── jobs.worker.ts
 ├── app.module.ts
 ├── app.setup.ts
+├── presets/
+│   ├── core-preset.module.ts
+│   ├── operations-preset.module.ts
+│   └── integrations-preset.module.ts
 ├── common/                         # technical cross-cutting concerns only
 │   ├── http/
 │   ├── infrastructure/
@@ -100,6 +108,14 @@ test/
 6. Infrastructure adapters implement those ports with TypeORM, bcrypt, JWT, SQS, SES, etc.
 7. Errors are translated to RFC 7807 in the global HTTP filter
 
+### Composition presets
+
+- `CorePresetModule` is the default starter slice for IAM, tenant context, health, idempotency, tracing, and runtime-safe problem details
+- `OperationsPresetModule` layers on operational visibility without changing the HTTP contract
+- `IntegrationsPresetModule` adds outbound email, durable jobs, and webhook delivery
+- `AppModule` composes all three presets
+- `WorkerModule` keeps the background runtime focused on jobs and the minimum infrastructure needed to run them
+
 ### Layer responsibilities
 
 `domain`
@@ -143,7 +159,7 @@ test/
 - shared kernel only inside IAM
 - reusable between `auth`, `users`, and `organizations`
 
-provider-only access modules
+### Provider-only access modules
 
 - `users-access.module.ts`, `organizations-access.module.ts`, and `iam-authorization-access.module.ts`
 - expose minimal DI providers to other modules without exporting the full feature module
@@ -363,12 +379,14 @@ Key rules:
 
 ### Environment files
 
+- `.env.example` is the versioned starting point for local runtime configuration; copy it to `.env` when bootstrapping a clone
+- `.env.test.example` is the versioned starting point for test runtime configuration; copy it to `.env.test` only when you need local overrides
 - `.env` is the default runtime configuration for local development and normal app startup
-- `.env.test` is loaded only when `NODE_ENV=test`
+- `.env.test` is optional local override input loaded only when `NODE_ENV=test`
 - runtime config is validated centrally before auth, Swagger, DB, and HTTP bootstrap consume it
 - `.env` must not contain test database credentials
-- `.env.test` is the only place for test database credentials
-- e2e tests use `.env.test`, so they should never need to rewrite the normal development database settings
+- `.env.test.example` is the canonical versioned source for test database credentials
+- e2e tests load `.env.test` when present, otherwise `.env.test.example`, so they never need to rewrite the normal development database settings
 - the bootstrap log prints the active environment and database name to make this visible at startup
 - if Nest starts but no tables exist, run `npm run db:migrate`
 - simple entity properties rely on `SnakeNamingStrategy`, so explicit column `name` mappings should only be used when they add real value
@@ -390,7 +408,7 @@ If you had an older local database created from pre-squash migrations, reset tha
 - Swagger UI is available at `/docs` when `SWAGGER_ENABLED=true`
 - default behavior is enabled outside production
 - `.env` enables Swagger for local development
-- `.env.test` disables Swagger for e2e to keep the test surface minimal
+- `.env.test.example` disables Swagger for e2e to keep the test surface minimal
 - the API uses Nest native URI versioning, so current endpoints are exposed under `/api/v1/...`
 
 ## Frontend Integration
@@ -426,6 +444,7 @@ Run all of these before considering work complete:
 - `npm run lint:check`
 - `npm run build`
 - `npm run test:arch`
+- `npm run test:smoke:presets`
 - `npm test -- --runInBand`
 - `npm run test:e2e -- --runInBand`
 

@@ -14,6 +14,7 @@ import { ApiKeysAccessModule } from '../api-keys/api-keys-access.module';
 import { JWT_TOKEN_PORT } from './application/ports/jwt-token.token';
 import { PASSWORD_HASHER_PORT } from './application/ports/password-hasher.token';
 import { AUTH_SESSION_REPOSITORY_TOKEN } from './application/ports/auth-session-repository.token';
+import { AUTH_RUNTIME_OPTIONS } from './application/ports/auth-runtime-options.token';
 import { USER_ACTION_TOKEN_REPOSITORY_TOKEN } from './application/ports/user-action-token-repository.token';
 import { JwtTokenAdapter } from './infrastructure/adapters/jwt-token.adapter';
 import { BcryptPasswordHasherAdapter } from './infrastructure/adapters/bcrypt-password-hasher.adapter';
@@ -57,6 +58,10 @@ import { UserActionTokenTypeOrmRepository } from './infrastructure/persistence/t
     }),
   ],
   providers: [
+    {
+      provide: AUTH_RUNTIME_OPTIONS,
+      useFactory: () => getAuthRuntimeConfig(),
+    },
     { provide: JWT_TOKEN_PORT, useClass: JwtTokenAdapter },
     { provide: PASSWORD_HASHER_PORT, useClass: BcryptPasswordHasherAdapter },
     { provide: AUTH_SESSION_REPOSITORY_TOKEN, useClass: AuthSessionTypeOrmRepository },
@@ -70,6 +75,7 @@ import { UserActionTokenTypeOrmRepository } from './infrastructure/persistence/t
     JwtAuthGuard,
   ],
   exports: [
+    AUTH_RUNTIME_OPTIONS,
     JWT_TOKEN_PORT,
     ApiKeysAccessModule,
     PASSWORD_HASHER_PORT,

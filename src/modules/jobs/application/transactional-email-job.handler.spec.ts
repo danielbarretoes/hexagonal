@@ -1,4 +1,5 @@
 import { TransactionalEmailJobHandler } from './transactional-email-job.handler';
+import { NonRetryableJobError } from './errors/non-retryable-job.error';
 
 describe('TransactionalEmailJobHandler', () => {
   const send = jest.fn();
@@ -87,5 +88,89 @@ describe('TransactionalEmailJobHandler', () => {
       id: 'job-2',
       status: 'completed',
     });
+  });
+
+  it('validates every supported transactional email payload type', () => {
+    const handler = new TransactionalEmailJobHandler(
+      { send } as never,
+      { findByJobIdAndHandler, create } as never,
+      { findByIdForUpdate, update } as never,
+      { runInTransaction } as never,
+    );
+
+    expect(
+      handler.validate({
+        type: 'password_reset',
+        to: 'owner@example.com',
+        recipientName: 'Owner',
+        resetToken: 'reset-token',
+        expiresInMinutes: 15,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'password_reset',
+      }),
+    );
+    expect(
+      handler.validate({
+        type: 'email_verification',
+        to: 'owner@example.com',
+        recipientName: 'Owner',
+        verificationToken: 'verify-token',
+        expiresInHours: 24,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'email_verification',
+      }),
+    );
+    expect(
+      handler.validate({
+        type: 'organization_invitation',
+        to: 'owner@example.com',
+        organizationName: 'Acme',
+        roleCode: 'member',
+        invitationToken: 'invite-token',
+        expiresInDays: 7,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'organization_invitation',
+      }),
+    );
+    expect(
+      handler.validate({
+        type: 'welcome',
+        to: 'owner@example.com',
+        recipientName: 'Owner',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'welcome',
+      }),
+    );
+  });
+
+  it('rejects malformed or unsupported transactional email payloads', () => {
+    const handler = new TransactionalEmailJobHandler(
+      { send } as never,
+      { findByJobIdAndHandler, create } as never,
+      { findByIdForUpdate, update } as never,
+      { runInTransaction } as never,
+    );
+
+    expect(() => handler.validate(null)).toThrow(NonRetryableJobError);
+    expect(() =>
+      handler.validate({
+        type: 'password_reset',
+        to: 'owner@example.com',
+      }),
+    ).toThrow('Invalid password reset payload');
+    expect(() =>
+      handler.validate({
+        type: 'unsupported',
+        to: 'owner@example.com',
+      }),
+    ).toThrow('Unsupported transactional email type: unsupported');
   });
 });

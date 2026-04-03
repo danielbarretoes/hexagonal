@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { OrganizationInvitation } from '../../../../domain/entities/organization-invitation.entity';
@@ -9,6 +9,10 @@ import {
   applyTypeormRlsContext,
   withTypeormManager,
 } from '../../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls.utils';
+import {
+  TYPEORM_RLS_RUNTIME_OPTIONS,
+  type TypeormRlsRuntimeOptions,
+} from '../../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls-runtime-options.token';
 
 @Injectable()
 export class OrganizationInvitationTypeOrmRepository implements OrganizationInvitationRepositoryPort {
@@ -17,13 +21,19 @@ export class OrganizationInvitationTypeOrmRepository implements OrganizationInvi
     private readonly dataSource: DataSource,
     @InjectRepository(OrganizationInvitationTypeOrmEntity)
     private readonly repository: Repository<OrganizationInvitationTypeOrmEntity>,
+    @Inject(TYPEORM_RLS_RUNTIME_OPTIONS)
+    private readonly typeormRlsRuntimeOptions: TypeormRlsRuntimeOptions,
   ) {}
 
   async findById(id: string): Promise<OrganizationInvitation | null> {
     const entity = await withTypeormManager(this.dataSource, async (manager) => {
-      await applyTypeormRlsContext(manager, {
-        'app.current_invitation_id': id,
-      });
+      await applyTypeormRlsContext(
+        manager,
+        {
+          'app.current_invitation_id': id,
+        },
+        this.typeormRlsRuntimeOptions.runtimeRole,
+      );
 
       return manager.getRepository(OrganizationInvitationTypeOrmEntity).findOne({
         where: { id },
@@ -42,9 +52,13 @@ export class OrganizationInvitationTypeOrmRepository implements OrganizationInvi
     }
 
     return withTypeormManager(this.dataSource, async (manager) => {
-      await applyTypeormRlsContext(manager, {
-        'app.current_organization_id': organizationId,
-      });
+      await applyTypeormRlsContext(
+        manager,
+        {
+          'app.current_organization_id': organizationId,
+        },
+        this.typeormRlsRuntimeOptions.runtimeRole,
+      );
 
       return operation(manager.getRepository(OrganizationInvitationTypeOrmEntity));
     });

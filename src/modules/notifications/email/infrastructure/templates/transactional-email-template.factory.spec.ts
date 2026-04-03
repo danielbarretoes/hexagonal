@@ -1,44 +1,22 @@
 import { TransactionalEmailTemplateFactory } from './transactional-email-template.factory';
 
 describe('TransactionalEmailTemplateFactory', () => {
-  const originalEnv = { ...process.env };
-
-  beforeEach(() => {
-    jest.resetModules();
-    process.env = {
-      ...originalEnv,
-      NODE_ENV: 'test',
-      API_BASE_URL: 'https://api.hexagonal.test',
-      APP_PUBLIC_URL: 'https://app.hexagonal.test',
-      EMAIL_ENABLED: 'false',
-      EMAIL_SES_REGION: 'us-east-1',
-      EMAIL_FROM_EMAIL: 'noreply@hexagonal.test',
-      EMAIL_FROM_NAME: 'Hexagonal Test',
-      EMAIL_BRAND_NAME: 'Hexagonal Test',
-      EMAIL_PASSWORD_RESET_PATH: '/reset-password',
-      EMAIL_VERIFICATION_PATH: '/verify-email',
-      EMAIL_INVITATION_PATH: '/accept-invitation',
-      EMAIL_WELCOME_PATH: '/login',
-      JWT_SECRET: 'your-super-secret-key-change-in-production-minimum-32-characters',
-      JWT_EXPIRES_IN: '15m',
-      DB_HOST: 'localhost',
-      DB_PORT: '5432',
-      DB_USERNAME: 'postgres',
-      DB_PASSWORD: 'postgres',
-      DB_DATABASE: 'hexagonal_test_db',
-      LOG_LEVEL: 'debug',
-      LOG_JSON: 'false',
-      LOG_SERVICE_NAME: 'hexagonal-api-test',
-      HTTP_BODY_LIMIT: '1mb',
-    };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
+  const emailRuntimeOptions = {
+    enabled: false,
+    provider: 'ses',
+    sesRegion: 'us-east-1',
+    fromEmail: 'noreply@hexagonal.test',
+    fromName: 'Hexagonal Test',
+    brandName: 'Hexagonal Test',
+    appPublicUrl: 'https://app.hexagonal.test',
+    passwordResetPath: '/reset-password',
+    emailVerificationPath: '/verify-email',
+    invitationPath: '/accept-invitation',
+    welcomePath: '/login',
+  } as const;
 
   it('builds public token URLs inside rendered templates', () => {
-    const factory = new TransactionalEmailTemplateFactory();
+    const factory = new TransactionalEmailTemplateFactory(emailRuntimeOptions);
 
     const rendered = factory.render({
       type: 'password_reset',
@@ -56,7 +34,7 @@ describe('TransactionalEmailTemplateFactory', () => {
   });
 
   it('escapes user-controlled values in html email bodies', () => {
-    const factory = new TransactionalEmailTemplateFactory();
+    const factory = new TransactionalEmailTemplateFactory(emailRuntimeOptions);
 
     const rendered = factory.render({
       type: 'organization_invitation',

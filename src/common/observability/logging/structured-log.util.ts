@@ -1,6 +1,6 @@
 import { ConsoleLogger } from '@nestjs/common';
 import type { LogLevel } from '@nestjs/common';
-import { getAppConfig } from '../../../config/env/app-config';
+import { getStructuredLoggingRuntime } from './logging-runtime';
 
 const LOGGER_CACHE = new Map<string, ConsoleLogger>();
 const STDERR_LEVELS = new Set<LogLevel>(['error', 'fatal']);
@@ -19,7 +19,7 @@ function getFallbackLogger(context: string): ConsoleLogger {
   }
 
   const logger = new ConsoleLogger(context, {
-    logLevels: getAppConfig().logging.enabledLevels,
+    logLevels: getStructuredLoggingRuntime().enabledLevels,
   });
   LOGGER_CACHE.set(context, logger);
 
@@ -27,7 +27,7 @@ function getFallbackLogger(context: string): ConsoleLogger {
 }
 
 function isLevelEnabled(level: LogLevel): boolean {
-  return getAppConfig().logging.enabledLevels.includes(level);
+  return getStructuredLoggingRuntime().enabledLevels.includes(level);
 }
 
 export function writeStructuredLog(
@@ -40,9 +40,9 @@ export function writeStructuredLog(
     return;
   }
 
-  const config = getAppConfig();
+  const runtime = getStructuredLoggingRuntime();
 
-  if (!config.logging.json) {
+  if (!runtime.json) {
     getFallbackLogger(context)[level](`${message} ${JSON.stringify(fields)}`);
     return;
   }
@@ -50,8 +50,8 @@ export function writeStructuredLog(
   const entry = {
     timestamp: new Date().toISOString(),
     level,
-    service: config.logging.serviceName,
-    environment: config.nodeEnv,
+    service: runtime.serviceName,
+    environment: runtime.environment,
     context,
     message,
     ...fields,

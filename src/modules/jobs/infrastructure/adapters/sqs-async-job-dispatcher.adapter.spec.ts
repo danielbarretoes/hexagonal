@@ -2,25 +2,33 @@ import { SendMessageCommand } from '@aws-sdk/client-sqs';
 import { SqsAsyncJobDispatcherAdapter } from './sqs-async-job-dispatcher.adapter';
 
 describe('SqsAsyncJobDispatcherAdapter', () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-  const originalJobsEnabled = process.env.JOBS_ENABLED;
-  const originalJobsQueueUrl = process.env.JOBS_SQS_QUEUE_URL;
-
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
-    process.env.JOBS_ENABLED = originalJobsEnabled;
-    process.env.JOBS_SQS_QUEUE_URL = originalJobsQueueUrl;
     jest.restoreAllMocks();
   });
 
   it('publishes FIFO envelopes with the provided message group and deduplication id', async () => {
-    process.env.NODE_ENV = 'development';
-    process.env.JOBS_ENABLED = 'true';
-    process.env.JOBS_SQS_QUEUE_URL =
-      'https://sqs.us-east-1.amazonaws.com/123456789012/hexagonal-jobs.fifo';
-
     const send = jest.fn().mockResolvedValue(undefined);
-    const adapter = new SqsAsyncJobDispatcherAdapter({ send });
+    const adapter = new SqsAsyncJobDispatcherAdapter({ send } as never, {
+      enabled: true,
+      sqsRegion: 'us-east-1',
+      sqsQueueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789012/hexagonal-jobs.fifo',
+      maxMessages: 5,
+      waitTimeSeconds: 10,
+      visibilityTimeoutSeconds: 30,
+      emailDeliveryMode: 'async',
+      outboxBatchSize: 25,
+      outboxPollIntervalMs: 1000,
+      outboxClaimTimeoutMs: 60000,
+      outboxCleanupEnabled: false,
+      outboxCleanupBatchSize: 200,
+      outboxCleanupIntervalMs: 900000,
+      outboxMaxAttempts: 8,
+      outboxRetryBaseMs: 1000,
+      outboxRetryMaxMs: 60000,
+      outboxRetentionPublishedHours: 720,
+      outboxRetentionCompletedHours: 720,
+      outboxRetentionDeadHours: 720,
+    });
 
     await adapter.publish({
       envelope: {

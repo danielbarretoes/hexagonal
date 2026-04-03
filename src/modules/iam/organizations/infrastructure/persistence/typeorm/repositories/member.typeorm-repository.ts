@@ -2,7 +2,7 @@
  * Member TypeORM Repository
  */
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { MemberTypeOrmEntity } from '../entities/member.entity';
@@ -20,6 +20,10 @@ import {
   applyTypeormRlsContext,
   withTypeormManager,
 } from '../../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls.utils';
+import {
+  TYPEORM_RLS_RUNTIME_OPTIONS,
+  type TypeormRlsRuntimeOptions,
+} from '../../../../../../../common/infrastructure/database/typeorm/transaction/typeorm-rls-runtime-options.token';
 
 @Injectable()
 export class MemberTypeOrmRepository implements MemberRepositoryPort {
@@ -28,6 +32,8 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     private readonly dataSource: DataSource,
     @InjectRepository(MemberTypeOrmEntity)
     private readonly repository: Repository<MemberTypeOrmEntity>,
+    @Inject(TYPEORM_RLS_RUNTIME_OPTIONS)
+    private readonly typeormRlsRuntimeOptions: TypeormRlsRuntimeOptions,
   ) {}
 
   private withTenantScope<T extends Record<string, string>>(baseWhere: T): T {
@@ -64,9 +70,13 @@ export class MemberTypeOrmRepository implements MemberRepositoryPort {
     }
 
     return withTypeormManager(this.dataSource, async (manager) => {
-      await applyTypeormRlsContext(manager, {
-        'app.current_organization_id': organizationId,
-      });
+      await applyTypeormRlsContext(
+        manager,
+        {
+          'app.current_organization_id': organizationId,
+        },
+        this.typeormRlsRuntimeOptions.runtimeRole,
+      );
 
       return operation(manager.getRepository(MemberTypeOrmEntity));
     });

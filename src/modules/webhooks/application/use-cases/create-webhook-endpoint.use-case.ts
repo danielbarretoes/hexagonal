@@ -4,12 +4,15 @@ import { ADMIN_AUDIT_PORT } from '../../../../shared/application/ports/admin-aud
 import { WEBHOOK_ENDPOINT_REPOSITORY_TOKEN } from '../../../../shared/application/ports/webhook-endpoint-repository.token';
 import { WEBHOOK_SECRET_CIPHER_TOKEN } from '../../../../shared/application/ports/webhook-secret-cipher.token';
 import type { AdminAuditPort } from '../../../../shared/domain/ports/admin-audit.port';
-import { getAppConfig } from '../../../../config/env/app-config';
 import type { WebhookEndpointRepositoryPort } from '../../domain/ports/webhook-endpoint.repository.port';
 import type { WebhookSecretCipherPort } from '../../domain/ports/webhook-secret-cipher.port';
 import { WebhookEndpoint } from '../../domain/entities/webhook-endpoint.entity';
 import { InvalidWebhookTargetException } from '../../domain/errors/invalid-webhook-target.exception';
 import { assertWebhookTargetAllowed } from '../../domain/webhook-target-policy';
+import {
+  WEBHOOKS_RUNTIME_OPTIONS,
+  type WebhooksRuntimeOptions,
+} from '../ports/webhooks-runtime-options.token';
 
 export interface CreateWebhookEndpointCommand {
   organizationId: string;
@@ -38,16 +41,17 @@ export class CreateWebhookEndpointUseCase {
     private readonly webhookSecretCipher: WebhookSecretCipherPort,
     @Inject(ADMIN_AUDIT_PORT)
     private readonly adminAuditPort: AdminAuditPort,
+    @Inject(WEBHOOKS_RUNTIME_OPTIONS)
+    private readonly webhooksRuntimeOptions: WebhooksRuntimeOptions,
   ) {}
 
   async execute(command: CreateWebhookEndpointCommand): Promise<CreateWebhookEndpointResponse> {
-    const webhookConfig = getAppConfig().webhooks;
     let normalizedTargetUrl: string;
 
     try {
       normalizedTargetUrl = assertWebhookTargetAllowed(command.url, {
-        requireHttps: webhookConfig.requireHttps,
-        allowPrivateTargets: webhookConfig.allowPrivateTargets,
+        requireHttps: this.webhooksRuntimeOptions.requireHttps,
+        allowPrivateTargets: this.webhooksRuntimeOptions.allowPrivateTargets,
       }).toString();
     } catch (error) {
       throw new InvalidWebhookTargetException(

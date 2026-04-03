@@ -1,9 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { getAppConfig } from '../../../../../../config/env/app-config';
 import type { DataSource } from 'typeorm';
 import type { JobOutboxRepositoryPort } from '../../../../domain/ports/job-outbox.repository.port';
 import type { JobOutbox, JobOutboxStatus } from '../../../../domain/entities/job-outbox.entity';
+import {
+  JOBS_RUNTIME_OPTIONS,
+  type JobsRuntimeOptions,
+} from '../../../../application/ports/jobs-runtime-options.token';
 import {
   getTypeormEntityManager,
   getTypeormRepository,
@@ -80,11 +83,11 @@ function isJobOutboxIdRow(value: unknown): value is JobOutboxIdRow {
 
 @Injectable()
 export class JobOutboxTypeOrmRepository implements JobOutboxRepositoryPort {
-  private readonly outboxClaimTimeoutMs = getAppConfig().jobs.outboxClaimTimeoutMs;
-
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    @Inject(JOBS_RUNTIME_OPTIONS)
+    private readonly jobsRuntimeOptions: JobsRuntimeOptions,
   ) {}
 
   async findById(id: string): Promise<JobOutbox | null> {
@@ -132,7 +135,9 @@ export class JobOutboxTypeOrmRepository implements JobOutboxRepositoryPort {
 
   async claimPendingBatch(limit: number, now: Date): Promise<JobOutbox[]> {
     const manager = getTypeormEntityManager(this.dataSource);
-    const staleClaimThreshold = new Date(now.getTime() - this.outboxClaimTimeoutMs);
+    const staleClaimThreshold = new Date(
+      now.getTime() - this.jobsRuntimeOptions.outboxClaimTimeoutMs,
+    );
     const queryResult: unknown = await manager.query(
       `
         WITH claimable AS (

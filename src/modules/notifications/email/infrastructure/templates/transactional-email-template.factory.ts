@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { getAppConfig } from '../../../../../config/env/app-config';
+import { Inject, Injectable } from '@nestjs/common';
 import type { TransactionalEmailMessage } from '../../../../../shared/domain/ports/transactional-email.port';
+import { EMAIL_RUNTIME_OPTIONS, type EmailRuntimeOptions } from '../../email-runtime-options.token';
 
 export interface RenderedTransactionalEmail {
   subject: string;
@@ -10,7 +10,10 @@ export interface RenderedTransactionalEmail {
 
 @Injectable()
 export class TransactionalEmailTemplateFactory {
-  private readonly emailConfig = getAppConfig().email;
+  constructor(
+    @Inject(EMAIL_RUNTIME_OPTIONS)
+    private readonly emailConfig: EmailRuntimeOptions,
+  ) {}
 
   render(message: TransactionalEmailMessage): RenderedTransactionalEmail {
     switch (message.type) {

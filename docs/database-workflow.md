@@ -11,8 +11,10 @@ That is intentional.
 The project is designed to use:
 
 - migrations for schema changes
+- `.env.example` as the versioned local runtime template
+- `.env.test.example` as the versioned test runtime template
 - `.env` for normal local runtime
-- `.env.test` for e2e tests
+- `.env.test` as an optional local test override
 - Nest native URI versioning for HTTP routes
 - a single baseline migration for clean project bootstrap
 
@@ -27,23 +29,24 @@ Used by normal app startup.
 Typical values:
 
 - `NODE_ENV=development`
-- `DB_DATABASE=hexagonal_db`
+- `DB_DATABASE=saas_template_db`
 - `SWAGGER_ENABLED=true`
 
-### `.env.test`
+### `.env.test.example`
 
-Used only when `NODE_ENV=test`.
+Versioned defaults used when `NODE_ENV=test` and no local `.env.test` override exists.
 
 Typical values:
 
 - `NODE_ENV=test`
-- `DB_DATABASE=hexagonal_test_db`
+- `DB_DATABASE=saas_template_test_db`
 - `SWAGGER_ENABLED=false`
 
 Best practice in this template:
 
-- keep development credentials only in `.env`
-- keep test credentials only in `.env.test`
+- keep development credentials in `.env`
+- keep the versioned test baseline in `.env.test.example`
+- use `.env.test` only for machine-local overrides
 - do not duplicate `TEST_DB_*` variables inside `.env`
 
 ## How Environment Loading Works
@@ -52,8 +55,8 @@ Environment loading is centralized in [`src/config/env/load-env.ts`](../src/conf
 
 Rules:
 
-- normal runtime loads `.env`
-- test runtime loads `.env` first and then `.env.test` with override
+- normal runtime loads `.env` when present, otherwise `.env.example`
+- test runtime loads `.env` or `.env.example` first and then `.env.test` or `.env.test.example` with override
 - e2e tests never need to mutate the normal development database settings
 
 The application bootstrap logs the selected environment and database name on startup.
@@ -68,7 +71,7 @@ The runtime now fails fast on invalid combinations such as:
 Example:
 
 ```text
-Environment: development, database: hexagonal_db
+Environment: development, database: saas_template_db
 ```
 
 Current route shape:
@@ -133,7 +136,7 @@ The project expects the normal local database to exist already.
 Example:
 
 ```sql
-CREATE DATABASE hexagonal_db;
+CREATE DATABASE saas_template_db;
 ```
 
 ### 2. Run migrations manually
@@ -158,8 +161,8 @@ E2E tests use the test database, not the normal development database.
 
 They use:
 
-- `.env.test`
-- `hexagonal_test_db`
+- `.env.test` or `.env.test.example`
+- `saas_template_test_db`
 - schema rebuild from migrations before tests
 
 Run:

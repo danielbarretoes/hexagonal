@@ -14,9 +14,9 @@ export function configureSwagger(app: INestApplication): void {
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
-      .setTitle('Hexagonal IAM Template API')
+      .setTitle('Modular SaaS Template API')
       .setDescription(
-        'Hexagonal NestJS template with IAM, organizations, auth, RFC 7807 problem details, HTTP logs, and PostgreSQL persistence.',
+        'NestJS SaaS template with IAM core, optional operations and integrations presets, RFC 7807 problem details, jobs, and PostgreSQL persistence.',
       )
       .setVersion('1.0.0')
       .addBearerAuth(

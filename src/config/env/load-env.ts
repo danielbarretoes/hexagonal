@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { config as loadDotenv } from 'dotenv';
+import type { RuntimeEnvironment } from '../../shared/domain/runtime/runtime-environment';
 
-export type RuntimeEnvironment = 'development' | 'test' | 'production';
+export type { RuntimeEnvironment } from '../../shared/domain/runtime/runtime-environment';
 
 function resolveRuntimeEnvironment(explicitEnvironment?: RuntimeEnvironment): RuntimeEnvironment {
   const runtimeEnvironment = explicitEnvironment ?? process.env.NODE_ENV;
@@ -20,15 +22,30 @@ export function loadEnvironment(explicitEnvironment?: RuntimeEnvironment): Runti
 
   process.env.NODE_ENV = runtimeEnvironment;
 
-  loadDotenv({
-    path: '.env',
-    override: false,
-  });
+  const baseEnvPath = existsSync('.env') ? '.env' : '.env.example';
+
+  if (runtimeEnvironment !== 'production' && existsSync(baseEnvPath)) {
+    loadDotenv({
+      path: baseEnvPath,
+      override: false,
+    });
+  }
 
   if (runtimeEnvironment === 'test') {
+    const testEnvPath = existsSync('.env.test') ? '.env.test' : '.env.test.example';
+
+    if (existsSync(testEnvPath)) {
+      loadDotenv({
+        path: testEnvPath,
+        override: true,
+      });
+    }
+  }
+
+  if (runtimeEnvironment === 'production' && existsSync('.env')) {
     loadDotenv({
-      path: '.env.test',
-      override: true,
+      path: '.env',
+      override: false,
     });
   }
 

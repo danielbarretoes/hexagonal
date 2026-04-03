@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { GlobalExceptionFilter } from './common/http/filters/http-exception.filter';
+import { PROBLEM_DETAILS_RUNTIME_OPTIONS } from './common/http/filters/problem-details-runtime-options.token';
 import { getAppConfig } from './config/env/app-config';
 import { configureSwagger } from './config/swagger/swagger.config';
 
@@ -49,6 +50,6 @@ export function configureHttpApplication(app: INestApplication): void {
     }),
   );
 
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalFilters(new GlobalExceptionFilter(app.get(PROBLEM_DETAILS_RUNTIME_OPTIONS)));
   configureSwagger(app);
 }
